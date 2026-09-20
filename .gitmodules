@@ -1,0 +1,9 @@
+[submodule "modules/skeleton"]
+	path = modules/skeleton
+	url = git@github.com:patrol-knight/skeleton_detection.git
+[submodule "modules/bridge"]
+	path = modules/bridge
+	url = git@github.com:patrol-knight/zenoh_bridge.git
+[submodule "modules/autoware"]
+	path = modules/autoware
+	url = git@github.com:patrol-knight/autoware.git
