@@ -32,7 +32,7 @@
     state.max_rate_hz: 5.0
     state.drop_unchanged: false
 
-    # Mission manager's zenohd, reached over the LAN -- set this to its real
-    # address, e.g. "tcp/192.168.1.10:7447".
+    # zenohd runs on its own (Docker, on this machine or another one) --
+    # set this to its address, e.g. "tcp/192.168.1.10:7447".
     zenoh.mode: client
     zenoh.connect: ["tcp/127.0.0.1:7447"]

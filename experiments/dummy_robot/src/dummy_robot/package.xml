@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>dummy_robot</name>
+  <version>0.1.0</version>
+  <description>
+    Lanelet-aware fake robot: accepts a goal on /dummy_robot/goal, plans a
+    route across the lanelet2 map's centerlines from its current pose to
+    that goal (a trimmed port of mission_manager/backend/core/map_server.py
+    -- see dummy_robot/lanelet_router.py), and drives toward it at a
+    constant speed. Publishes the same odom/battery/operational_state
+    topics the old deterministic version did, so robot_state_aggregator and
+    zenoh_bridge_core need no changes. Not a physics simulator --
+    swapping this for Autoware or a real robot later means pointing
+    robot_state_aggregator at different topics, not changing anything
+    downstream. Python/rclpy rather than C++: faster to iterate on for a
+    prototype, and this is the one node meant to be replaced wholesale.
+  </description>
+
+  <maintainer email="devnull@example.com">zenoh_bridge maintainers</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>nav_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

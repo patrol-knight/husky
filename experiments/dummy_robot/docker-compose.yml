@@ -1,0 +1,87 @@
+# Dummy robot test stack: exercises the robot-side Zenoh dataflow on a dev
+# machine, standing in for the real Husky --
+#
+#   dummy_robot   lanelet-following fake robot (stands in for Autoware):
+#                 publishes /dummy_robot/{odom,battery_percent,operational_state},
+#                 drives to goals on /dummy_robot/goal
+#   zenoh_bridge  zenoh_bridge_node + aggregator_node (mode: robot), built
+#                 from modules/zenoh_bridge as-is: aggregates the dummy's
+#                 topics into robot state for Zenoh, relays navigate_to_goal
+#                 commands from Zenoh to /dummy_robot/goal
+#   realsense     the Husky's own launch/realsense.launch.py + config, for a
+#                 RealSense plugged into this machine (keeps warning "No
+#                 RealSense devices were found" and waits if none is)
+#
+# zenohd is NOT part of this stack by default -- it runs independently, on
+# this machine or another one, and zenoh_bridge connects to it by address
+# (config/zenoh_bridge.yaml's zenoh.connect). For a self-contained test
+# with no zenohd running anywhere yet, start this file's own with the
+# `zenohd` profile.
+#
+# The dummy's route planning needs mission_manager's lanelet2 map --
+# MAP_DIR defaults to a sibling mission_manager checkout next to husky/.
+#
+# Usage (from this directory):
+#   docker compose up --build                      # zenohd already running elsewhere
+#   docker compose --profile zenohd up --build     # + a local zenohd
+#   MAP_DIR=/path/to/maps docker compose up --build
+#   docker compose --profile zenohd down
+#
+# ROS traffic stays on this compose project's own network (DDS discovery
+# between the three containers); only Zenoh leaves it.
+services:
+  dummy_robot:
+    build:
+      context: .
+      dockerfile: docker/dummy_robot.Dockerfile
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+    volumes:
+      - ./config/dummy_robot.yaml:/config/dummy_robot.yaml:ro
+      - ${MAP_DIR:-../../../mission_manager/backend/storage/maps}:/maps:ro
+    restart: unless-stopped
+
+  zenoh_bridge:
+    build:
+      context: ../../modules/zenoh_bridge
+      dockerfile: docker/Dockerfile
+      target: runtime
+    command:
+      - ros2
+      - launch
+      - /opt/zenoh_bridge_files/launch/bringup.launch.py
+      - device_config:=/config/zenoh_bridge.yaml
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+    volumes:
+      - ./config/zenoh_bridge.yaml:/config/zenoh_bridge.yaml:ro
+    # Makes host.docker.internal (zenoh.connect's same-machine default)
+    # resolve on Linux -- Docker Desktop does this on its own.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  realsense:
+    build:
+      context: .
+      dockerfile: docker/realsense.Dockerfile
+    # librealsense needs raw USB access; a plain /dev/bus/usb device mount
+    # was not enough in iot's identical setup.
+    privileged: true
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+    volumes:
+      - ../../launch:/husky/launch:ro
+      - ../../config:/husky/config:ro
+      - /dev/bus/usb:/dev/bus/usb
+    restart: unless-stopped
+
+  # Optional local router -- same image zenoh_bridge's zenoh-c (1.8.0) was
+  # tested against. Publishes 7447 on the host, so other machines on the
+  # LAN can use it too.
+  zenohd:
+    profiles: ["zenohd"]
+    image: eclipse/zenoh:1.8.0
+    ports:
+      - "7447:7447"
+    restart: unless-stopped
