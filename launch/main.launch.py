@@ -10,6 +10,7 @@ Typical usage (after ./scripts/build.sh):
   ros2 launch launch/main.launch.py
   ros2 launch launch/main.launch.py realsense:=false zenoh_bridge:=true
   ros2 launch launch/main.launch.py sensors:=true   # Autoware workspace sourced too
+  ros2 launch launch/main.launch.py joystick:=true foxglove:=true   # development tools
 
 launch/ and config/ are plain source-tree directories (this repo has no
 compiled nodes of its own, just orchestration), not an ament package share
@@ -35,6 +36,9 @@ ZENOH_BRIDGE_CONFIG = os.path.join(REPO_ROOT, "config", "zenoh_bridge.yaml")
 # Temporary VLP-16 + Fixposition bring-up, to be replaced by Autoware's own
 # sensor launch. Needs the Autoware workspace sourced, so it's off by default.
 SENSORS_LAUNCH = os.path.join(REPO_ROOT, "launch", "sensors.launch.py")
+# Development tools, off by default.
+JOYSTICK_LAUNCH = os.path.join(REPO_ROOT, "launch", "joystick.launch.py")
+FOXGLOVE_LAUNCH = os.path.join(REPO_ROOT, "launch", "foxglove.launch.py")
 
 
 def generate_launch_description():
@@ -55,6 +59,16 @@ def generate_launch_description():
             description="Bring up the VLP-16 lidar + Fixposition GNSS/IMU (needs the "
                         "Autoware workspace sourced)",
         ),
+        DeclareLaunchArgument(
+            "joystick",
+            default_value="false",
+            description="Development: drive the Husky with a controller plugged into the Orin",
+        ),
+        DeclareLaunchArgument(
+            "foxglove",
+            default_value="false",
+            description="Development: foxglove_bridge on ws://<orin-ip>:8765 for remote monitoring",
+        ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(REALSENSE_LAUNCH),
             launch_arguments={"config_file": REALSENSE_CONFIG}.items(),
@@ -68,5 +82,13 @@ def generate_launch_description():
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(SENSORS_LAUNCH),
             condition=IfCondition(LaunchConfiguration("sensors")),
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(JOYSTICK_LAUNCH),
+            condition=IfCondition(LaunchConfiguration("joystick")),
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(FOXGLOVE_LAUNCH),
+            condition=IfCondition(LaunchConfiguration("foxglove")),
         ),
     ])

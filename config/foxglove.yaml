@@ -1,0 +1,12 @@
+# foxglove_bridge: WebSocket server the Foxglove app (e.g. in the remote
+# center) connects to -- ws://<orin-ip>:8765. Only topics a Foxglove client
+# actually subscribes to are sent, so heavy streams (point clouds, images)
+# cost nothing until someone opens a panel for them.
+foxglove_bridge:
+  ros__parameters:
+    port: 8765
+    address: 0.0.0.0
+    topic_whitelist: [".*"]
+    # Per-client send buffer (bytes) -- messages are dropped rather than
+    # queued past this, so a slow wireless link can't back up the bridge.
+    send_buffer_limit: 10000000
