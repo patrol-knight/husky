@@ -1,0 +1,29 @@
+# Clearpath robot.yaml for this Husky A200 -- the single input to the
+# Clearpath stack. launch/husky.launch.py copies it into .clearpath/ and runs
+# Clearpath's generators on it every launch (robot model, controller/EKF/
+# twist_mux params, platform launch file), so edit this file and relaunch --
+# never edit anything under .clearpath/.
+#
+# serial_number identifies the physical robot/MCU and is intentionally kept
+# separate from system.ros2.namespace, which only controls the ROS topic/TF
+# prefix. Changing the namespace does not change the robot's identity.
+serial_number: "a200-0000"
+
+system:
+  # username/hosts are only used by Clearpath's systemd services, which this
+  # repo does not install -- kept so the file stays valid for its parser.
+  username: administrator
+  hosts:
+    - hostname: cpr-a200-0000
+      ip: 192.168.131.1
+  ros2:
+    # Public ROS namespace: /husky/... instead of /a200_0000/...
+    namespace: husky
+    # Not applied by the launch -- ROS_DOMAIN_ID comes from your shell, the
+    # same as every other part of main.launch.py.
+    domain_id: 0
+    middleware:
+      # The A200 MCU needs FastDDS; husky.launch.py sets this for its nodes.
+      implementation: rmw_fastrtps_cpp
+      discovery: simple
+    workspaces: []
