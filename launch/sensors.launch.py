@@ -23,7 +23,7 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_VLP16_CONFIG = os.path.join(REPO_ROOT, "config", "VLP16.param.yaml")
+DEFAULT_VLP16_CONFIG = os.path.join(REPO_ROOT, "config", "vlp16.param.yaml")
 
 
 def generate_launch_description():
@@ -32,7 +32,7 @@ def generate_launch_description():
             "vlp16_config",
             default_value=DEFAULT_VLP16_CONFIG,
             description="nebula_velodyne parameter YAML for the VLP-16 -- defaults to "
-                        "config/VLP16.param.yaml",
+                        "config/vlp16.param.yaml",
         ),
         IncludeLaunchDescription(
             AnyLaunchDescriptionSource(PathJoinSubstitution([
@@ -42,7 +42,6 @@ def generate_launch_description():
                 "config_file": LaunchConfiguration("vlp16_config"),
             }.items(),
         ),
-        # Uses the driver's own bundled launch/config.yaml, same as before.
         IncludeLaunchDescription(
             AnyLaunchDescriptionSource(PathJoinSubstitution([
                 FindPackageShare("fixposition_driver_ros2"), "launch", "node.launch"])),

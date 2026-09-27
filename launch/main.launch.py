@@ -17,6 +17,9 @@ launch/ and config/ are plain source-tree directories (this repo has no
 compiled nodes of its own, just orchestration), not an ament package share
 dir -- editing a launch file or config value takes effect immediately, no
 rebuild needed. Only modules/zenoh_bridge's packages are compiled.
+
+To drive from a PC instead of the Orin, run modules/joystick's
+docker-compose.yml there and keep joystick:=false here.
 """
 
 import os
@@ -40,8 +43,11 @@ ZENOH_BRIDGE_CONFIG = os.path.join(REPO_ROOT, "config", "zenoh_bridge.yaml")
 # Temporary VLP-16 + Fixposition bring-up, to be replaced by Autoware's own
 # sensor launch. Needs the Autoware workspace sourced, so it's off by default.
 SENSORS_LAUNCH = os.path.join(REPO_ROOT, "launch", "sensors.launch.py")
-# Development tools, off by default.
-JOYSTICK_LAUNCH = os.path.join(REPO_ROOT, "launch", "joystick.launch.py")
+# Xbox joystick teleop (modules/joystick owns the mapping and speeds), off by
+# default. Feeds twist_mux's joystick input (priority 10): pre-empts plain
+# /husky/cmd_vel, not RC teleop or the e-stop. Runs under /husky/joystick --
+# the Clearpath stack already has its own idle /husky/joy_node.
+JOYSTICK_LAUNCH = os.path.join(REPO_ROOT, "modules", "joystick", "launch", "joystick.launch.py")
 
 
 def generate_launch_description():
@@ -98,6 +104,10 @@ def generate_launch_description():
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(JOYSTICK_LAUNCH),
+            launch_arguments={
+                "namespace": "/husky/joystick",
+                "cmd_vel_topic": "/husky/joy_teleop/cmd_vel",
+            }.items(),
             condition=IfCondition(LaunchConfiguration("joystick")),
         ),
         # WebSocket server for the Foxglove app: ws://<orin-ip>:8765. Only

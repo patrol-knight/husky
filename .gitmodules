@@ -2,3 +2,7 @@
 	path = modules/zenoh_bridge
 	url = git@github.com:patrol-knight/zenoh_bridge.git
 	branch = main
+[submodule "modules/joystick"]
+	path = modules/joystick
+	url = git@github.com:patrol-knight/joystick-generic
+	branch = main

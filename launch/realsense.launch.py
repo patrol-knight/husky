@@ -19,8 +19,6 @@ from launch.actions import DeclareLaunchArgument, GroupAction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetRemap
 
-# This repo's launch/ and config/ are plain source-tree directories, not an
-# ament package share dir -- both are direct children of the repo root.
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_CONFIG = os.path.join(REPO_ROOT, "config", "realsense.yaml")
 
