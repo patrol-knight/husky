@@ -6,3 +6,7 @@
 	path = modules/joystick
 	url = git@github.com:patrol-knight/joystick-generic
 	branch = main
+[submodule "modules/clearpath_robot"]
+	path = modules/clearpath_robot
+	url = https://github.com/clearpathrobotics/clearpath_robot.git
+	branch = humble

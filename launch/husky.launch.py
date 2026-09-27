@@ -15,9 +15,6 @@ talks over serial, not CAN). Nothing is installed into systemd, /etc or
 another user -- never run `ros2 run clearpath_robot install` on the Orin,
 it adds boot services that would start a second driver fighting over the
 serial port.
-
-Needs ros-humble-clearpath-robot installed and, once per host,
-scripts/setup_serial.sh for serial port access.
 """
 
 import os
@@ -27,33 +24,30 @@ import subprocess
 from ament_index_python.packages import get_package_prefix
 from launch import LaunchDescription
 from launch.actions import (
-    DeclareLaunchArgument,
-    GroupAction,
-    IncludeLaunchDescription,
     LogInfo,
+    GroupAction,
     OpaqueFunction,
+    DeclareLaunchArgument,
     SetEnvironmentVariable,
+    IncludeLaunchDescription,
 )
-from launch.launch_description_sources import PythonLaunchDescriptionSource
+
 from launch.substitutions import LaunchConfiguration
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_ROBOT_CONFIG = os.path.join(REPO_ROOT, "config", "husky.yaml")
-# Generated output -- wiped and rewritten every launch. Trailing slash matches
-# Clearpath's own /etc/clearpath/ default, which the generated files embed.
+
 SETUP_PATH = os.path.join(REPO_ROOT, ".clearpath") + os.sep
-
-# The A200 MCU firmware only talks FastDDS on Humble.
 RMW_IMPLEMENTATION = "rmw_fastrtps_cpp"
-
-# Where A200Hardware opens the MCU -- a udev symlink from scripts/setup_serial.sh.
 SERIAL_DEVICE = "/dev/clearpath/prolific"
 
 GENERATORS = [
     ("clearpath_generator_common", "generate_description"),
     ("clearpath_generator_common", "generate_semantic_description"),
-    ("clearpath_generator_robot", "generate_param"),
-    ("clearpath_generator_robot", "generate_launch"),
+    ("clearpath_generator_robot",  "generate_param"),
+    ("clearpath_generator_robot",  "generate_launch"),
 ]
 
 
@@ -66,7 +60,6 @@ def _generate_and_launch(context, *args, **kwargs):
 
     env = dict(os.environ, RMW_IMPLEMENTATION=RMW_IMPLEMENTATION)
     for package, executable in GENERATORS:
-        # Called directly rather than via `ros2 run` to skip the CLI's startup cost.
         command = [os.path.join(get_package_prefix(package), "lib", package, executable), "-s", SETUP_PATH]
         result = subprocess.run(command, env=env, capture_output=True, text=True)
         if result.returncode != 0:
@@ -77,8 +70,6 @@ def _generate_and_launch(context, *args, **kwargs):
     platform_launch = os.path.join(SETUP_PATH, "platform", "launch", "platform-service.launch.py")
     actions = []
     if not os.path.exists(SERIAL_DEVICE):
-        # ros2_control_node dies on startup without it ("TransportException 2:
-        # Failed to open serial port") and is not restarted.
         actions.append(LogInfo(msg=(
             f"[husky] WARNING: {SERIAL_DEVICE} not found -- the Husky driver will fail to start. "
             "Check the robot's USB-serial cable, or run scripts/setup_serial.sh once on this host.")))
