@@ -1,27 +1,3 @@
-"""Top-level entry point for the Husky.
-
-Brings up each of this repo's components, each toggled by its own
-name:=true/false launch argument. Runs against the Orin's native ROS 2
-install (no Docker).
-
-Typical usage (after ./scripts/build.sh):
-
-  source install/setup.bash
-  ros2 launch launch/main.launch.py
-  ros2 launch launch/main.launch.py realsense:=false zenoh_bridge:=true
-  ros2 launch launch/main.launch.py husky:=false    # everything but the robot base
-  ros2 launch launch/main.launch.py sensors:=true   # Autoware workspace sourced too
-  ros2 launch launch/main.launch.py joystick:=true foxglove:=true   # development tools
-
-launch/ and config/ are plain source-tree directories (this repo has no
-compiled nodes of its own, just orchestration), not an ament package share
-dir -- editing a launch file or config value takes effect immediately, no
-rebuild needed. Only modules/zenoh_bridge's packages are compiled.
-
-To drive from a PC instead of the Orin, run modules/joystick's
-docker-compose.yml there and keep joystick:=false here.
-"""
-
 import os
 
 from launch import LaunchDescription
@@ -29,25 +5,11 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
+
 from launch_ros.actions import Node
 
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# Husky A200 driver (official Clearpath stack, generated from config/husky.yaml).
-HUSKY_LAUNCH = os.path.join(REPO_ROOT, "launch", "husky.launch.py")
-REALSENSE_LAUNCH = os.path.join(REPO_ROOT, "launch", "realsense.launch.py")
-REALSENSE_CONFIG = os.path.join(REPO_ROOT, "config", "realsense.yaml")
-# zenoh_bridge's own bringup launches zenoh_bridge_node, plus aggregator_node
-# because config/zenoh_bridge.yaml sets mode: robot.
-ZENOH_BRIDGE_LAUNCH = os.path.join(REPO_ROOT, "modules", "zenoh_bridge", "launch", "bringup.launch.py")
-ZENOH_BRIDGE_CONFIG = os.path.join(REPO_ROOT, "config", "zenoh_bridge.yaml")
-# Temporary VLP-16 + Fixposition bring-up, to be replaced by Autoware's own
-# sensor launch. Needs the Autoware workspace sourced, so it's off by default.
-SENSORS_LAUNCH = os.path.join(REPO_ROOT, "launch", "sensors.launch.py")
-# Xbox joystick teleop (modules/joystick owns the mapping and speeds), off by
-# default. Feeds twist_mux's joystick input (priority 10): pre-empts plain
-# /husky/cmd_vel, not RC teleop or the e-stop. Runs under /husky/joystick --
-# the Clearpath stack already has its own idle /husky/joy_node.
-JOYSTICK_LAUNCH = os.path.join(REPO_ROOT, "modules", "joystick", "launch", "joystick.launch.py")
 
 
 def generate_launch_description():
@@ -69,12 +31,6 @@ def generate_launch_description():
             description="Bring up zenoh_bridge_node + aggregator_node",
         ),
         DeclareLaunchArgument(
-            "sensors",
-            default_value="false",
-            description="Bring up the VLP-16 lidar + Fixposition GNSS/IMU (needs the "
-                        "Autoware workspace sourced)",
-        ),
-        DeclareLaunchArgument(
             "joystick",
             default_value="false",
             description="Development: drive the Husky with a controller plugged into the Orin",
@@ -84,26 +40,33 @@ def generate_launch_description():
             default_value="false",
             description="Development: foxglove_bridge on ws://<orin-ip>:8765 for remote monitoring",
         ),
+        DeclareLaunchArgument(
+                    "sensors",
+                    default_value="false",
+                    description="Bring up the VLP-16 lidar + Fixposition GNSS/IMU (needs the "
+                                "Autoware workspace sourced)",
+                ),
+                
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(HUSKY_LAUNCH),
+            PythonLaunchDescriptionSource(os.path.join(REPO_ROOT, "launch/husky.launch.py")),
             condition=IfCondition(LaunchConfiguration("husky")),
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(REALSENSE_LAUNCH),
-            launch_arguments={"config_file": REALSENSE_CONFIG}.items(),
+            PythonLaunchDescriptionSource(os.path.join(REPO_ROOT, "launch/realsense.launch.py")),
+            launch_arguments={"config_file": os.path.join(REPO_ROOT, "config/realsense.yaml")}.items(),
             condition=IfCondition(LaunchConfiguration("realsense")),
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(ZENOH_BRIDGE_LAUNCH),
-            launch_arguments={"device_config": ZENOH_BRIDGE_CONFIG}.items(),
+            PythonLaunchDescriptionSource(os.path.join(REPO_ROOT, "modules/zenoh_bridge/launch/bringup.launch.py")),
+            launch_arguments={"device_config": os.path.join(REPO_ROOT, "config/zenoh_bridge.yaml")}.items(),
             condition=IfCondition(LaunchConfiguration("zenoh_bridge")),
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(SENSORS_LAUNCH),
+            PythonLaunchDescriptionSource(os.path.join(REPO_ROOT, "launch/sensors.launch.py")),
             condition=IfCondition(LaunchConfiguration("sensors")),
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(JOYSTICK_LAUNCH),
+            PythonLaunchDescriptionSource(os.path.join(REPO_ROOT, "modules/joystick/launch/joystick.launch.py")),
             launch_arguments={
                 "namespace": "/husky/joystick",
                 "cmd_vel_topic": "/husky/joy_teleop/cmd_vel",
