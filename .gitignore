@@ -9,3 +9,4 @@ __pycache__/
 
 # Clearpath files generated from config/husky.yaml by launch/husky.launch.py
 .clearpath/
+data/
