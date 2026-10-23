@@ -10,7 +10,9 @@
 #                  nodes), clearpath_generator_robot, clearpath_diagnostics.
 #                  The rest of the Clearpath stack comes from apt
 #                  (ros-humble-clearpath-common).
-#   zenoh_bridge   zenoh_bridge, aggregator, zenoh_bridge_msgs.
+#   zenoh_bridge   zenoh_bridge, aggregator, zenoh_bridge_msgs, plus
+#                  patrolknight_msgs, which --deps clones into its src/
+#                  (modules/zenoh_bridge/scripts/install.sh).
 #
 # Building one group leaves the other's already-installed packages in place.
 #
@@ -18,6 +20,7 @@
 #   ./scripts/build.sh                     # all groups
 #   ./scripts/build.sh clearpath           # one group
 #   ./scripts/build.sh --deps clearpath    # rosdep-install its dependencies first
+#   ./scripts/build.sh --deps zenoh_bridge # run zenoh_bridge's install.sh first
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -25,7 +28,9 @@ cd "$REPO_ROOT"
 
 declare -A GROUP_PATHS=(
   [clearpath]="modules/clearpath_robot/clearpath_hardware_interfaces modules/clearpath_robot/clearpath_generator_robot modules/clearpath_robot/clearpath_diagnostics"
-  [zenoh_bridge]="$(echo modules/zenoh_bridge/src/*)"
+  # Globbed when paths are collected, so it picks up patrolknight_msgs
+  # once --deps has cloned it.
+  [zenoh_bridge]="modules/zenoh_bridge/src/*"
 )
 ALL_GROUPS=(clearpath zenoh_bridge)
 
@@ -54,6 +59,11 @@ if [[ -z "${ROS_DISTRO:-}" ]]; then
   exit 1
 fi
 
+if $deps && [[ " ${groups[*]} " == *" zenoh_bridge "* ]]; then
+  echo "==> zenoh_bridge install.sh"
+  modules/zenoh_bridge/scripts/install.sh
+fi
+
 paths=()
 for group in "${groups[@]}"; do
   for path in ${GROUP_PATHS[$group]}; do
@@ -61,6 +71,11 @@ for group in "${groups[@]}"; do
     paths+=("$path")
   done
 done
+
+if [[ " ${groups[*]} " == *" zenoh_bridge "* && ! -d modules/zenoh_bridge/src/patrolknight_msgs ]]; then
+  echo "Missing modules/zenoh_bridge/src/patrolknight_msgs -- run: ./scripts/build.sh --deps zenoh_bridge" >&2
+  exit 1
+fi
 
 if $deps; then
   echo "==> rosdep install for: ${groups[*]}"
@@ -76,4 +91,4 @@ colcon build --merge-install \
 
 echo "==> done. Next:"
 echo "  source install/setup.bash"
-echo "  ros2 launch launch/main.launch.py"
+echo "  ./launch.sh"
