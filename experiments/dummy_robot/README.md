@@ -110,8 +110,8 @@ stateDiagram-v2
 whether or not it changed. Consumers must not assume every `"arrived"` sample
 belongs to the goal they just issued. `zenoh_bridge_node` only reacts to
 actual transitions, and Mission Manager guards against it too: both
-`MissionDriveCoordinator` and `AnomalyResponseCoordinator`
-(`mission_manager/backend/core/mission_drive.py`, `anomaly_response.py`)
+`MissionDriveCoordinator` and `InvestigationCoordinator`
+(`mission_manager/backend/core/mission_drive.py`, `investigation.py`)
 ignore state samples not newer than their goal's `issued_after_timestamp`.
 
 ### Command lifecycle

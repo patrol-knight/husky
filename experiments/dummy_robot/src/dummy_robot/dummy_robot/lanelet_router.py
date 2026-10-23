@@ -4,7 +4,7 @@ A trimmed port of mission_manager/backend/core/map_server.py's routing
 logic -- deliberately duplicated rather than shared. dummy_robot stands in
 for a robot's own onboard nav stack, which plans its own path from a goal
 position alone; it must never receive a path computed by the backend (see
-NavigationGatewayComponent/AnomalyResponseCoordinator, which only ever send
+NavigationGatewayComponent/InvestigationCoordinator, which only ever send
 a goal). Only local (x, y) lanelet centerline geometry is needed here --
 no lat/lon conversion, no GeoJSON, unlike MapServer's version.
 """
