@@ -3,7 +3,7 @@
 /**:
   ros__parameters:
     # Device
-    device_id: husky-01
+    device_id: husky
     mode: robot
 
     # Camera (RealSense mounting offset relative to base_link)
