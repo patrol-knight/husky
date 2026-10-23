@@ -1,38 +1,16 @@
-# zenoh_bridge_node's single config file for this Husky -- identity, camera
-# mounting offset, WebRTC/state tuning, and the Zenoh endpoint.
-#
-# mode: robot is what makes modules/zenoh_bridge's bringup.launch.py start
-# aggregator_node alongside zenoh_bridge_node. aggregator_node reads only
-# device_id from this file; which robot topics it aggregates is its own
-# bundled config (modules/zenoh_bridge/src/aggregator/config/sources.yaml),
-# not something to set here.
+# zenoh_bridge config for this Husky (mode: robot).
+# Pose comes from aggregator_node on /robot/state; unset keys use zenoh_bridge's defaults.
 /**:
   ros__parameters:
+    # Device
     device_id: husky-01
     mode: robot
-    # Unused in mode: robot -- live pose comes from aggregator_node's
-    # /robot/state instead.
-    x: 0.0
-    y: 0.0
-    yaw: 0.0
-    update_rate_hz: 2.0
 
-    # RealSense mounting offset relative to base_link. The camera image
-    # topic itself is fixed (/device/camera/front/image_raw).
+    # Camera (RealSense mounting offset relative to base_link)
     camera.offset_x: 0.0
     camera.offset_y: 0.0
     camera.offset_yaw: 0.0
 
-    # WebRTC pipeline tuning.
-    webrtc.topic_wait_timeout_sec: 3.0
-    webrtc.stream_stale_timeout_sec: 10.0
-    webrtc.ice_servers: ["stun:stun.l.google.com:19302"]
-
-    # Device-state -> Zenoh publish rate.
-    state.max_rate_hz: 5.0
-    state.drop_unchanged: false
-
-    # zenohd runs on its own (Docker, on this machine or another one) --
-    # set this to its address, e.g. "tcp/192.168.1.10:7447".
+    # Zenoh (zenohd's LAN address, e.g. tcp/192.168.1.10:7447)
     zenoh.mode: client
     zenoh.connect: ["tcp/127.0.0.1:7447"]
