@@ -1,31 +1,15 @@
-# zenoh_bridge_node config for the dummy robot -- same shape as the Husky's
-# own ../../config/zenoh_bridge.yaml, with a separate device_id so it never
-# collides with a real Husky on the same zenohd.
+# zenoh_bridge config for the dummy robot. Own device_id so it can share a zenohd with the real Husky.
 /**:
   ros__parameters:
+    # Device
     device_id: husky-sim-01
     mode: robot
-    # Unused in mode: robot -- live pose comes from aggregator_node's
-    # /robot/state instead.
-    x: 0.0
-    y: 0.0
-    yaw: 0.0
-    update_rate_hz: 2.0
 
+    # Camera
     camera.offset_x: 0.0
     camera.offset_y: 0.0
     camera.offset_yaw: 0.0
 
-    webrtc.topic_wait_timeout_sec: 3.0
-    webrtc.stream_stale_timeout_sec: 10.0
-    webrtc.ice_servers: ["stun:stun.l.google.com:19302"]
-
-    state.max_rate_hz: 5.0
-    state.drop_unchanged: false
-
-    # zenohd runs on its own, on this machine or another one. The default
-    # reaches a zenohd on this same machine (any zenohd publishing 7447 on
-    # the host, including this compose file's own `zenohd` profile); for one
-    # on another machine, set its LAN address, e.g. "tcp/192.168.1.10:7447".
+    # Zenoh (zenohd on another machine: "tcp/<ip>:7447")
     zenoh.mode: client
     zenoh.connect: ["tcp/host.docker.internal:7447"]

@@ -1,14 +1,7 @@
-# dummy_robot_node parameters (see src/dummy_robot/dummy_robot/dummy_robot_node.py).
-# Default x/y is mission-1's home waypoint (mission_manager's
-# backend/storage/missions/mission-1-48umx5.yaml), a real, already-validated
-# in-lanelet point -- an arbitrary point is very likely NOT inside any
-# lanelet on this map. Map paths point at docker-compose.yml's /maps mount
-# of mission_manager's map files.
+# dummy_robot_node parameters. x/y is mission-1's home waypoint (a known in-lanelet point).
 /**:
   ros__parameters:
     x: -67.34
     y: 33.31
     yaw: 0.0
     speed_mps: 4.0
-    map_osm_path: /maps/lanelet2_map.osm
-    map_projector_path: /maps/map_projector_info.yaml

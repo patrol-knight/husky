@@ -1,21 +1,14 @@
 #!/usr/bin/env bash
-# Choose which of this stack's docker-compose containers to run, mirroring
-# ros2 launch's own name:=true/false argument style (same interface as the
-# iot repo's launch.sh), and provide matching `build`/`down` commands.
+# Start/build/stop the dummy robot containers.
 #
-#   ./launch.sh up                                  # defaults: dummy_robot + zenoh_bridge + realsense
-#   ./launch.sh up realsense:=false                 # no RealSense plugged in
-#   ./launch.sh build                               # build images only, don't start
-#   ./launch.sh down                                # stop + remove everything, whatever was up
-#
-# Backed by docker-compose.yml's profiles -- every service there has a
-# `profiles:` entry, so each node here maps to exactly one --profile and
-# nothing starts by accident. zenohd is never started here -- see
-# docker-compose.yml's header for where it comes from.
+#   ./launch.sh up [<node>:=false ...]   # dummy_robot, zenoh_bridge, realsense
+#   ./launch.sh build
+#   ./launch.sh down
 set -euo pipefail
 
 STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE=(docker compose -f "$STACK_DIR/docker-compose.yml" --project-directory "$STACK_DIR")
+BRIDGE_CONFIG="$STACK_DIR/config/zenoh_bridge.yaml"
 
 # node name -> compose profile name (docker-compose.yml)
 declare -A NODE_PROFILE=(
@@ -36,10 +29,7 @@ Known nodes: ${!NODE_PROFILE[*]} (default: all true)
 USAGE
 }
 
-# Parses <node>:=<true|false> args into the global `selected` array (node
-# names whose value ended up true) and `profile_flags` array (their
-# --profile flags for docker compose). Shared by up/build so their node
-# selection logic can't drift apart.
+# Sets globals `selected` and `profile_flags`.
 parse_node_args() {
   declare -A value=(
     [dummy_robot]="true"
@@ -83,8 +73,36 @@ parse_node_args() {
   fi
 }
 
+# LAN IPv4: route to zenohd, else default route, else first non-Docker address.
+detect_lan_ip() {
+  local target ip_addr
+  target="$(sed -n 's|^[[:space:]]*zenoh\.connect:.*tcp/\([0-9.]*\):.*|\1|p' "$BRIDGE_CONFIG" | head -n1)"
+  [[ -z "$target" || "$target" == 127.* ]] && target="1.1.1.1"
+  ip_addr="$(ip -4 route get "$target" 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -n1)"
+  if [[ -z "$ip_addr" ]]; then
+    ip_addr="$(ip -4 -o addr show scope global \
+      | awk '$2 !~ /^(docker|br-|veth)/ {split($4, a, "/"); print a[1]; exit}')"
+  fi
+  echo "$ip_addr"
+}
+
+# Exports WEBRTC_ANNOUNCED_IP (env wins, else detected) for the browser to reach the camera.
+check_webrtc_address() {
+  if [[ -z "${WEBRTC_ANNOUNCED_IP:-}" ]] && command -v ip >/dev/null; then
+    export WEBRTC_ANNOUNCED_IP="$(detect_lan_ip)"
+  fi
+  if [[ -z "${WEBRTC_ANNOUNCED_IP:-}" ]]; then
+    echo "WARNING: no LAN address found: camera video only reaches a browser on this machine." >&2
+  else
+    echo "==> camera video: browsers connect to $WEBRTC_ANNOUNCED_IP:${WEBRTC_ICE_PORT:-50000}/udp"
+  fi
+}
+
 cmd_up() {
   parse_node_args "$@"
+  if [[ " ${selected[*]} " == *" zenoh_bridge "* ]]; then
+    check_webrtc_address
+  fi
   echo "==> starting: ${selected[*]}"
   "${COMPOSE[@]}" "${profile_flags[@]}" up --build
 }
