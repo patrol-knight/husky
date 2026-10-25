@@ -2,7 +2,9 @@
 
 # record_battery.sh
 # Record Husky battery test data
+cd "$(dirname "$0")/.."
 source install/setup.bash
+mkdir -p data
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BAG_NAME="data/battery_test_${TIMESTAMP}"
 
