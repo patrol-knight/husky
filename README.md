@@ -23,6 +23,5 @@ source /opt/ros/humble/setup.bash
 | `husky`        | `true`  | Husky A200 driver (Clearpath stack: MCU, controllers, battery) |
 | `realsense`    | `true`  | RealSense camera (`config/realsense.yaml`) |
 | `zenoh_bridge` | `true`  | `zenoh_bridge_node` + `aggregator_node` (`config/zenoh_bridge.yaml`; set `zenoh.connect` to the mission manager's `zenohd`) |
-| `joystick`     | `false` | Development: drive the Husky with a controller plugged into the Orin. **Not working yet**: the Xbox controller firmware can't be installed on the Orin |
 | `foxglove`     | `false` | Development: `foxglove_bridge` on `ws://<orin-ip>:8765` for remote monitoring |
 | `sensors`      | `false` | VLP-16 lidar + Fixposition GNSS/IMU (needs the Autoware workspace sourced) |

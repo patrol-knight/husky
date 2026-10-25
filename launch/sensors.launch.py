@@ -1,18 +1,5 @@
-"""Temporary sensor bring-up for the Husky: VLP-16 lidar + Fixposition
-GNSS/IMU.
-
-Stand-in for Autoware's own sensor launch -- replace this whole file (and
-its sensors:= switch in main.launch.py) with Autoware's launch once that is
-wired up. Launches the same two upstream launch files as the old
-sensor-driver shell script, but under ros2 launch, so Ctrl-C shuts every
-node down cleanly.
-
-Both driver packages (nebula_velodyne, fixposition_driver_ros2) come from
-the Autoware workspace, which must be sourced before launching:
-
-  source /opt/ros/humble/setup.bash
-  source <autoware>/install/setup.bash
-"""
+"""Temporary VLP-16 + Fixposition bring-up, until Autoware's sensor launch replaces it.
+Needs the Autoware workspace sourced."""
 
 import os
 
@@ -31,8 +18,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "vlp16_config",
             default_value=DEFAULT_VLP16_CONFIG,
-            description="nebula_velodyne parameter YAML for the VLP-16 -- defaults to "
-                        "config/vlp16.param.yaml",
+            description="nebula_velodyne parameter YAML for the VLP-16",
         ),
         IncludeLaunchDescription(
             AnyLaunchDescriptionSource(PathJoinSubstitution([

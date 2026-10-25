@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Builds the compiled parts of this repo's submodules into one merged install
 # space at the repo root (build/, install/, log/). This repo's own launch/ and
-# config/ are plain directories -- nothing for colcon to build there -- and
-# modules/joystick is launch + config only.
+# config/ are plain directories -- nothing for colcon to build there.
 #
 # Groups:
 #   clearpath      the Husky driver packages Clearpath only ships for amd64:

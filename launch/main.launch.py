@@ -17,36 +17,29 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "husky",
             default_value="true",
-            description="Bring up the Husky A200 driver (Clearpath stack: MCU, controllers, "
-                        "twist_mux, EKF, battery)",
+            description="Husky A200 driver (Clearpath stack)",
         ),
         DeclareLaunchArgument(
             "realsense",
             default_value="true",
-            description="Bring up the RealSense camera",
+            description="RealSense camera",
         ),
         DeclareLaunchArgument(
             "zenoh_bridge",
             default_value="true",
-            description="Bring up zenoh_bridge_node + aggregator_node",
-        ),
-        DeclareLaunchArgument(
-            "joystick",
-            default_value="false",
-            description="Development: drive the Husky with a controller plugged into the Orin",
+            description="zenoh_bridge_node + aggregator_node",
         ),
         DeclareLaunchArgument(
             "foxglove",
             default_value="false",
-            description="Development: foxglove_bridge on ws://<orin-ip>:8765 for remote monitoring",
+            description="Dev: foxglove_bridge on ws://<orin-ip>:8765",
         ),
         DeclareLaunchArgument(
-                    "sensors",
-                    default_value="false",
-                    description="Bring up the VLP-16 lidar + Fixposition GNSS/IMU (needs the "
-                                "Autoware workspace sourced)",
-                ),
-                
+            "sensors",
+            default_value="false",
+            description="VLP-16 + Fixposition (needs the Autoware workspace sourced)",
+        ),
+
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(REPO_ROOT, "launch/husky.launch.py")),
             condition=IfCondition(LaunchConfiguration("husky")),
@@ -65,19 +58,8 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(os.path.join(REPO_ROOT, "launch/sensors.launch.py")),
             condition=IfCondition(LaunchConfiguration("sensors")),
         ),
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(os.path.join(REPO_ROOT, "modules/joystick/launch/joystick.launch.py")),
-            launch_arguments={
-                "namespace": "/husky/joystick",
-                "cmd_vel_topic": "/husky/joy_teleop/cmd_vel",
-            }.items(),
-            condition=IfCondition(LaunchConfiguration("joystick")),
-        ),
-        # WebSocket server for the Foxglove app: ws://<orin-ip>:8765. Only
-        # topics a Foxglove panel subscribes to are sent, and the per-client
-        # send buffer drops messages past 10 MB rather than queueing, so a
-        # slow wireless link can't back up the bridge. Connected clients can
-        # also publish topics and set parameters -- development use only.
+        # Drops past a 10 MB per-client buffer so a slow link can't back up the bridge.
+        # Clients can publish and set params: development only.
         Node(
             package="foxglove_bridge",
             executable="foxglove_bridge",

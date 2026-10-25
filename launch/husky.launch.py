@@ -1,20 +1,8 @@
-"""Husky A200 driver: the official Clearpath ROS 2 stack, run natively.
+"""Husky A200 driver (Clearpath stack), run natively.
 
-Every launch, this regenerates the Clearpath setup from config/husky.yaml
-into .clearpath/ (gitignored) and then includes the generated
-platform/launch/platform-service.launch.py -- the same file Clearpath's own
-clearpath-platform.service runs. That brings up ros2_control_node with the
-A200Hardware interface (opens /dev/clearpath/prolific to talk to the MCU),
-the diff-drive controller, twist_mux, the EKF, and the battery/diagnostics
-nodes, all under /husky.
-
-Runs the same generators as Clearpath's clearpath-robot.service, minus
-setup.bash (RMW is set here instead, ROS_DOMAIN_ID comes from the shell),
-the discovery server (robot.yaml uses simple discovery) and vcan (the A200
-talks over serial, not CAN). Nothing is installed into systemd, /etc or
-another user -- never run `ros2 run clearpath_robot install` on the Orin,
-it adds boot services that would start a second driver fighting over the
-serial port.
+Regenerates .clearpath/ from config/husky.yaml on every launch and includes the
+generated platform-service.launch.py. Never run `ros2 run clearpath_robot install`
+on the Orin: its boot services start a second driver on the same serial port.
 """
 
 import os
@@ -31,7 +19,6 @@ from launch.actions import (
     SetEnvironmentVariable,
     IncludeLaunchDescription,
 )
-
 from launch.substitutions import LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 
@@ -86,7 +73,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "robot_config",
             default_value=DEFAULT_ROBOT_CONFIG,
-            description="Clearpath robot.yaml for this Husky -- defaults to config/husky.yaml",
+            description="Clearpath robot.yaml for this Husky",
         ),
         OpaqueFunction(function=_generate_and_launch),
     ])
