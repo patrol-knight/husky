@@ -21,6 +21,7 @@
 #   ./scripts/build.sh clearpath           # one group
 #   ./scripts/build.sh --deps clearpath    # rosdep-install its dependencies first
 #   ./scripts/build.sh --deps zenoh_bridge # run zenoh_bridge's install.sh first
+#   ./scripts/build.sh --deps skeleton     # download skeleton_detection's models first
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -63,6 +64,11 @@ fi
 if $deps && [[ " ${groups[*]} " == *" zenoh_bridge "* ]]; then
   echo "==> zenoh_bridge install.sh"
   modules/zenoh_bridge/scripts/install.sh
+fi
+
+if $deps && [[ " ${groups[*]} " == *" skeleton "* ]]; then
+  echo "==> skeleton_detection models"
+  python3 modules/skeleton_detection/docker/fetch_models.py --models-dir modules/skeleton_detection/models
 fi
 
 paths=()

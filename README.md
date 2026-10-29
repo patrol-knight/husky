@@ -7,7 +7,7 @@ git submodule update --init --recursive
 ./scripts/build.sh --deps               # first time: install dependencies, then build
 ./scripts/build.sh zenoh_bridge         # later: rebuild one group (clearpath | zenoh_bridge | skeleton)
 ```
-`--deps zenoh_bridge` runs `modules/zenoh_bridge/scripts/install.sh` (apt packages, libnice 0.1.23, `patrolknight_msgs`), so run it from a real terminal: it prompts for `sudo`.
+`--deps zenoh_bridge` runs `modules/zenoh_bridge/scripts/install.sh` (apt packages, libnice 0.1.23, `patrolknight_msgs`), so run it from a real terminal: it prompts for `sudo`. `--deps skeleton` downloads the skeleton_detection model weights into `modules/skeleton_detection/models/`.
 
 ## Launch
 ```bash
