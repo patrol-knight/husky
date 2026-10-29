@@ -63,7 +63,10 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(
                 os.path.join(REPO_ROOT, "modules/skeleton_detection/launch/skeleton_detection_bringup.launch.py")
             ),
-            launch_arguments={"models_dir": os.path.join(REPO_ROOT, "modules/skeleton_detection/models")}.items(),
+            launch_arguments={
+                "config": os.path.join(REPO_ROOT, "config/skeleton_detection.yaml"),
+                "models_dir": os.path.join(REPO_ROOT, "modules/skeleton_detection/models"),
+            }.items(),
             condition=IfCondition(LaunchConfiguration("skeleton")),
         ),
         IncludeLaunchDescription(

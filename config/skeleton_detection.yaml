@@ -1,0 +1,14 @@
+rtmo_node:
+  ros__parameters:
+    input_mode: ros_camera
+    rgbd_topic: /camera/camera/rgbd
+    output_topic: /skeleton_detection/frame
+
+    enable_tracking: true
+    with_reid: true
+    occlusion_aware_tracking: true
+
+    publish_visualization_image: true
+    draw_person_xyz: true
+
+    stats_log_period_sec: 10.0

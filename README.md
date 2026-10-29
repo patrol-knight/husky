@@ -22,6 +22,6 @@ git submodule update --init --recursive
 | `husky`        | `true`  | Husky A200 driver (Clearpath stack: MCU, controllers, battery) |
 | `realsense`    | `true`  | RealSense camera (`config/realsense.yaml`) |
 | `zenoh_bridge` | `true`  | `zenoh_bridge_node` + `aggregator_node` (`config/zenoh_bridge.yaml`; set `zenoh.connect` to the mission manager's `zenohd`) |
-| `skeleton`     | `false` | `skeleton_detection` node, consumes the RealSense RGBD topic (needs `realsense:=true`) |
+| `skeleton`     | `false` | `skeleton_detection` node (`config/skeleton_detection.yaml`), consumes the RealSense RGBD topic (needs `realsense:=true`) |
 | `foxglove`     | `false` | Development: `foxglove_bridge` on `ws://<orin-ip>:8765` for remote monitoring |
 | `sensors`      | `false` | VLP-16 lidar + Fixposition GNSS/IMU (needs the Autoware workspace sourced) |
