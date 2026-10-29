@@ -11,4 +11,4 @@ rtmo_node:
     publish_visualization_image: true
     draw_person_xyz: true
 
-    stats_log_period_sec: 10.0
+    stats_log_period_sec: 30.0
