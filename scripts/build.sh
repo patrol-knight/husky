@@ -12,6 +12,7 @@
 #   zenoh_bridge   zenoh_bridge, aggregator, zenoh_bridge_msgs, plus
 #                  patrolknight_msgs, which --deps clones into its src/
 #                  (modules/zenoh_bridge/scripts/install.sh).
+#   skeleton       skeleton_detection (needs patrolknight_msgs from zenoh_bridge).
 #
 # Building one group leaves the other's already-installed packages in place.
 #
@@ -30,11 +31,12 @@ declare -A GROUP_PATHS=(
   # Globbed when paths are collected, so it picks up patrolknight_msgs
   # once --deps has cloned it.
   [zenoh_bridge]="modules/zenoh_bridge/src/*"
+  [skeleton]="modules/skeleton_detection"
 )
-ALL_GROUPS=(clearpath zenoh_bridge)
+ALL_GROUPS=(clearpath zenoh_bridge skeleton)
 
 usage() {
-  echo "Usage: $(basename "$0") [--deps] [clearpath] [zenoh_bridge]" >&2
+  echo "Usage: $(basename "$0") [--deps] [clearpath] [zenoh_bridge] [skeleton]" >&2
   exit 1
 }
 

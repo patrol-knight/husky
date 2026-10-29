@@ -4,9 +4,8 @@ Bringup for the Clearpath Husky A200 on an NVIDIA Jetson Orin NX (ROS 2 Humble).
 ## Build
 ```bash
 git submodule update --init --recursive
-source /opt/ros/humble/setup.bash
 ./scripts/build.sh --deps               # first time: install dependencies, then build
-./scripts/build.sh zenoh_bridge         # later: rebuild one group (clearpath | zenoh_bridge)
+./scripts/build.sh zenoh_bridge         # later: rebuild one group (clearpath | zenoh_bridge | skeleton)
 ```
 `--deps zenoh_bridge` runs `modules/zenoh_bridge/scripts/install.sh` (apt packages, libnice 0.1.23, `patrolknight_msgs`), so run it from a real terminal: it prompts for `sudo`.
 
@@ -23,5 +22,6 @@ source /opt/ros/humble/setup.bash
 | `husky`        | `true`  | Husky A200 driver (Clearpath stack: MCU, controllers, battery) |
 | `realsense`    | `true`  | RealSense camera (`config/realsense.yaml`) |
 | `zenoh_bridge` | `true`  | `zenoh_bridge_node` + `aggregator_node` (`config/zenoh_bridge.yaml`; set `zenoh.connect` to the mission manager's `zenohd`) |
+| `skeleton`     | `false` | `skeleton_detection` node, consumes the RealSense RGBD topic (needs `realsense:=true`) |
 | `foxglove`     | `false` | Development: `foxglove_bridge` on `ws://<orin-ip>:8765` for remote monitoring |
 | `sensors`      | `false` | VLP-16 lidar + Fixposition GNSS/IMU (needs the Autoware workspace sourced) |
