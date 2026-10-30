@@ -6,3 +6,7 @@
 	path = modules/clearpath_robot
 	url = https://github.com/clearpathrobotics/clearpath_robot.git
 	branch = humble
+[submodule "modules/skeleton_detection"]
+	path = modules/skeleton_detection
+	url = git@github.com:patrol-knight/skeleton_detection.git
+	branch = main

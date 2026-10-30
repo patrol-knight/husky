@@ -30,6 +30,11 @@ def generate_launch_description():
             description="zenoh_bridge_node + aggregator_node",
         ),
         DeclareLaunchArgument(
+            "skeleton",
+            default_value="false",
+            description="skeleton_detection rtmo_node (consumes the RealSense RGBD topic)",
+        ),
+        DeclareLaunchArgument(
             "foxglove",
             default_value="false",
             description="Dev: foxglove_bridge on ws://<orin-ip>:8765",
@@ -53,6 +58,16 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(os.path.join(REPO_ROOT, "modules/zenoh_bridge/launch/bringup.launch.py")),
             launch_arguments={"device_config": os.path.join(REPO_ROOT, "config/zenoh_bridge.yaml")}.items(),
             condition=IfCondition(LaunchConfiguration("zenoh_bridge")),
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(REPO_ROOT, "modules/skeleton_detection/launch/skeleton_detection_bringup.launch.py")
+            ),
+            launch_arguments={
+                "config": os.path.join(REPO_ROOT, "config/skeleton_detection.yaml"),
+                "models_dir": os.path.join(REPO_ROOT, "modules/skeleton_detection/models"),
+            }.items(),
+            condition=IfCondition(LaunchConfiguration("skeleton")),
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(REPO_ROOT, "launch/sensors.launch.py")),

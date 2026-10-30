@@ -12,6 +12,7 @@
 #   zenoh_bridge   zenoh_bridge, aggregator, zenoh_bridge_msgs, plus
 #                  patrolknight_msgs, which --deps clones into its src/
 #                  (modules/zenoh_bridge/scripts/install.sh).
+#   skeleton       skeleton_detection (needs patrolknight_msgs from zenoh_bridge).
 #
 # Building one group leaves the other's already-installed packages in place.
 #
@@ -20,6 +21,7 @@
 #   ./scripts/build.sh clearpath           # one group
 #   ./scripts/build.sh --deps clearpath    # rosdep-install its dependencies first
 #   ./scripts/build.sh --deps zenoh_bridge # run zenoh_bridge's install.sh first
+#   ./scripts/build.sh --deps skeleton     # download skeleton_detection's models first
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -30,11 +32,12 @@ declare -A GROUP_PATHS=(
   # Globbed when paths are collected, so it picks up patrolknight_msgs
   # once --deps has cloned it.
   [zenoh_bridge]="modules/zenoh_bridge/src/*"
+  [skeleton]="modules/skeleton_detection"
 )
-ALL_GROUPS=(clearpath zenoh_bridge)
+ALL_GROUPS=(clearpath zenoh_bridge skeleton)
 
 usage() {
-  echo "Usage: $(basename "$0") [--deps] [clearpath] [zenoh_bridge]" >&2
+  echo "Usage: $(basename "$0") [--deps] [clearpath] [zenoh_bridge] [skeleton]" >&2
   exit 1
 }
 
@@ -61,6 +64,11 @@ fi
 if $deps && [[ " ${groups[*]} " == *" zenoh_bridge "* ]]; then
   echo "==> zenoh_bridge install.sh"
   modules/zenoh_bridge/scripts/install.sh
+fi
+
+if $deps && [[ " ${groups[*]} " == *" skeleton "* ]]; then
+  echo "==> skeleton_detection models"
+  python3 modules/skeleton_detection/docker/fetch_models.py --models-dir modules/skeleton_detection/models
 fi
 
 paths=()
