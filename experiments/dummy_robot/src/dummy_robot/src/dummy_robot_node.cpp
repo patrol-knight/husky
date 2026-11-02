@@ -100,6 +100,8 @@ public:
 
     // Autoware localization: published only once initialized.
     odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("/localization/kinematic_state", 10);
+    // Clearpath wheel odometry (EKF): always published, localized or not.
+    wheel_odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("/husky/platform/odom/filtered", 10);
     // Clearpath BMS.
     battery_pub_ = create_publisher<sensor_msgs::msg::BatteryState>("/husky/platform/bms/state", 10);
     // robot_state: reliable + transient-local.
@@ -264,8 +266,10 @@ private:
 
     const double yaw_before = yaw_;
     advance(dt);
+    const double yaw_rate = dt > 0.0 ? wrap_angle(yaw_ - yaw_before) / dt : 0.0;
+    publish_wheel_odom(yaw_rate);
     if (localized()) {
-      publish_odom(dt > 0.0 ? wrap_angle(yaw_ - yaw_before) / dt : 0.0);
+      publish_odom(yaw_rate);
     }
 
     if (seconds_between(last_battery_publish_, now) >= kBatteryPeriodSec) {
@@ -363,6 +367,19 @@ private:
     odom_pub_->publish(msg);
   }
 
+  // Only the twist matters downstream (aggregator's speed source); the
+  // pose is in the odom frame, not the map.
+  void publish_wheel_odom(double yaw_rate)
+  {
+    nav_msgs::msg::Odometry msg;
+    msg.header.stamp = now();
+    msg.header.frame_id = "odom";
+    msg.child_frame_id = "base_link";
+    msg.twist.twist.linear.x = mode_ == Mode::kNavigate ? speed_mps_ : 0.0;
+    msg.twist.twist.angular.z = yaw_rate;
+    wheel_odom_pub_->publish(msg);
+  }
+
   void publish_battery(double elapsed_sec)
   {
     const double cycle_pos = std::fmod(elapsed_sec, battery_cycle_sec_) / battery_cycle_sec_;
@@ -403,6 +420,7 @@ private:
   SteadyClock::time_point last_battery_publish_;
 
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
+  rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr wheel_odom_pub_;
   rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr battery_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_pub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;

@@ -95,6 +95,7 @@ Only one `navigate_to_goal` is outstanding at a time. A new one replaces the las
 | Topic | Type | | Real Husky |
 |---|---|---|---|
 | `/localization/kinematic_state` | `nav_msgs/Odometry` (`map`, body-frame twist) | pub | Autoware |
+| `/husky/platform/odom/filtered` | `nav_msgs/Odometry` (body-frame twist; always, localized or not) | pub | Clearpath EKF |
 | `/husky/platform/bms/state` | `sensor_msgs/BatteryState` (`percentage` 0–1) | pub | Clearpath driver |
 | `/robot_status` | `std_msgs/String`: `notready` / `ready` / `navigate` / `reach` / `manual` / `failure` | pub | `robot_state` |
 | `/planning/mission_planning/goal` | `geometry_msgs/PoseStamped` | sub | Autoware adaptor |
