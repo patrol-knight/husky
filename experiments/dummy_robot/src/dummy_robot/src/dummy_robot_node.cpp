@@ -29,12 +29,18 @@ constexpr double kArrivalToleranceM = 0.3;
 constexpr double kStatusPeriodSec = 0.2;  // robot_state: 5 Hz
 constexpr double kReachHoldSec = 0.2;     // robot_state: "reach" once, "ready" 0.2 s later
 constexpr double kBatteryPeriodSec = 1.0;
+constexpr double kRetryPeriodSec = 1.0;
 
 using SteadyClock = std::chrono::steady_clock;
 
 double seconds_between(SteadyClock::time_point from, SteadyClock::time_point to)
 {
   return std::chrono::duration<double>(to - from).count();
+}
+
+SteadyClock::duration to_duration(double sec)
+{
+  return std::chrono::duration_cast<SteadyClock::duration>(std::chrono::duration<double>(sec));
 }
 
 double wrap_angle(double angle)
@@ -80,6 +86,7 @@ public:
     speed_mps_ = declare_parameter<double>("speed_mps", 1.5);
     // Autoware rejects a goal that isn't on a lanelet; this is the slack allowed.
     goal_map_tolerance_m_ = declare_parameter<double>("goal_map_tolerance_m", 1.0);
+    route_request_sec_ = declare_parameter<double>("route_request_sec", 0.5);
     const auto map_osm_path = declare_parameter<std::string>("map_osm_path", "/maps/lanelet2_map.osm");
     const auto map_projector_path =
       declare_parameter<std::string>("map_projector_path", "/maps/map_projector_info.yaml");
@@ -107,6 +114,12 @@ public:
     // Test hook in place of a joystick: true = takeover, false = released.
     manual_sub_ = create_subscription<std_msgs::msg::Bool>(
       "/dummy_robot/manual", 10, [this](std_msgs::msg::Bool::ConstSharedPtr msg) {on_manual(msg->data);});
+    route_reject_sub_ = create_subscription<std_msgs::msg::Bool>(
+      "/dummy_robot/route_reject", 10,
+      [this](std_msgs::msg::Bool::ConstSharedPtr msg) {route_reject_ = msg->data;});
+    localization_lost_sub_ = create_subscription<std_msgs::msg::Bool>(
+      "/dummy_robot/localization_lost", 10,
+      [this](std_msgs::msg::Bool::ConstSharedPtr msg) {on_localization_lost(msg->data);});
 
     start_time_ = SteadyClock::now();
     last_tick_ = start_time_;
@@ -128,23 +141,46 @@ private:
       RCLCPP_WARN(get_logger(), "Ignoring goal while %s", status_name(mode_));
       return;
     }
-    const double gx = msg.pose.position.x;
-    const double gy = msg.pose.position.y;
-
-    std::optional<std::vector<Point2d>> path;
-    if (router_ && router_->distance_to_map(gx, gy) <= goal_map_tolerance_m_) {
-      path = router_->plan_route(x_, y_, gx, gy);
+    if (pending_goal_) {
+      RCLCPP_WARN(get_logger(), "Dropping goal: a route request is in flight");
+      return;
     }
-    if (!path || path->empty()) {
-      // Like Autoware's rejected route: failure until a cancel or a routable goal.
-      RCLCPP_WARN(get_logger(), "No route to goal (%.2f, %.2f): failure", gx, gy);
+    pending_goal_ = Point2d{msg.pose.position.x, msg.pose.position.y};
+    pending_until_ = SteadyClock::now() + to_duration(route_request_sec_);
+  }
+
+  std::optional<std::vector<Point2d>> request_route(const Point2d & goal) const
+  {
+    const auto [gx, gy] = goal;
+    if (route_reject_ || !router_ || router_->distance_to_map(gx, gy) > goal_map_tolerance_m_) {
+      return std::nullopt;
+    }
+    auto path = router_->plan_route(x_, y_, gx, gy);
+    if (path && path->empty()) {
+      return std::nullopt;
+    }
+    return path;
+  }
+
+  void finish_route_request()
+  {
+    const Point2d goal = *pending_goal_;
+    pending_goal_.reset();
+    const auto [gx, gy] = goal;
+
+    auto path = request_route(goal);
+    if (!path) {
+      RCLCPP_WARN(get_logger(), "Route rejected for goal (%.2f, %.2f): failure", gx, gy);
       clear_route();
       reach_until_.reset();
+      failed_goal_ = goal;
+      last_retry_ = SteadyClock::now();
       set_mode(Mode::kFailure);
       return;
     }
 
     // Covers ready, arrived (ready after reach), rerouting while navigating, and failure.
+    failed_goal_.reset();
     path_ = std::move(*path);
     path_index_ = 0;
     reach_until_.reset();
@@ -152,8 +188,27 @@ private:
     RCLCPP_INFO(get_logger(), "New goal (%.2f, %.2f): %zu-point route", gx, gy, path_.size());
   }
 
+  void retry_failed_goal(SteadyClock::time_point now)
+  {
+    if (mode_ != Mode::kFailure || !failed_goal_ || pending_goal_ ||
+      seconds_between(last_retry_, now) < kRetryPeriodSec)
+    {
+      return;
+    }
+    last_retry_ = now;
+    if (!request_route(*failed_goal_)) {
+      return;
+    }
+    // The adaptor clears the recovered route: back to ready without driving.
+    failed_goal_.reset();
+    set_mode(Mode::kReady);
+    RCLCPP_INFO(get_logger(), "Retry planned: failure cleared, route dropped");
+  }
+
   void on_cancel()
   {
+    pending_goal_.reset();
+    failed_goal_.reset();
     clear_route();
     if (mode_ == Mode::kNavigate || mode_ == Mode::kFailure) {
       set_mode(Mode::kReady);
@@ -164,17 +219,33 @@ private:
   void on_manual(bool active)
   {
     if (active) {
-      if (mode_ == Mode::kFailure) {
-        RCLCPP_WARN(get_logger(), "Ignoring manual takeover while failure (as robot_state does)");
-        return;
-      }
-      // robot_state cancels the route on a takeover.
+      // robot_state cancels the route on a takeover, and the operator drives out of a failure.
+      pending_goal_.reset();
+      failed_goal_.reset();
       clear_route();
       reach_until_.reset();
       set_mode(Mode::kManual);
     } else if (mode_ == Mode::kManual) {
-      set_mode(initialized() ? Mode::kReady : Mode::kNotReady);
+      set_mode(localized() ? Mode::kReady : Mode::kNotReady);
     }
+  }
+
+  void on_localization_lost(bool lost)
+  {
+    if (lost == localization_lost_) {
+      return;
+    }
+    localization_lost_ = lost;
+    if (!lost) {
+      return;
+    }
+    pending_goal_.reset();
+    clear_route();
+    reach_until_.reset();
+    if (mode_ == Mode::kReady || mode_ == Mode::kNavigate) {
+      set_mode(Mode::kNotReady);
+    }
+    RCLCPP_WARN(get_logger(), "Localization lost at (%.2f, %.2f)", x_, y_);
   }
 
   void tick()
@@ -183,13 +254,17 @@ private:
     const double dt = seconds_between(last_tick_, now);
     last_tick_ = now;
 
-    if (mode_ == Mode::kNotReady && initialized()) {
+    if (mode_ == Mode::kNotReady && localized()) {
       set_mode(Mode::kReady);
     }
+    if (pending_goal_ && now >= pending_until_) {
+      finish_route_request();
+    }
+    retry_failed_goal(now);
 
     const double yaw_before = yaw_;
     advance(dt);
-    if (initialized()) {
+    if (localized()) {
       publish_odom(dt > 0.0 ? wrap_angle(yaw_ - yaw_before) / dt : 0.0);
     }
 
@@ -237,15 +312,14 @@ private:
       mode_ = Mode::kReady;
       // "reach" once; tick() sends "ready" kReachHoldSec later.
       publish_status("reach");
-      reach_until_ = SteadyClock::now() + std::chrono::duration_cast<SteadyClock::duration>(
-        std::chrono::duration<double>(kReachHoldSec));
+      reach_until_ = SteadyClock::now() + to_duration(kReachHoldSec);
       RCLCPP_INFO(get_logger(), "Reached goal at (%.2f, %.2f)", x_, y_);
     }
   }
 
-  bool initialized() const
+  bool localized() const
   {
-    return seconds_between(start_time_, SteadyClock::now()) >= init_delay_sec_;
+    return !localization_lost_ && seconds_between(start_time_, SteadyClock::now()) >= init_delay_sec_;
   }
 
   void clear_route()
@@ -309,12 +383,19 @@ private:
   double battery_cycle_sec_;
   double speed_mps_;
   double goal_map_tolerance_m_;
+  double route_request_sec_;
+  bool route_reject_ = false;
+  bool localization_lost_ = false;
 
   std::optional<LaneletRouter> router_;
   Mode mode_ = Mode::kNotReady;
   std::vector<Point2d> path_;
   std::size_t path_index_ = 0;
   std::optional<SteadyClock::time_point> reach_until_;
+  std::optional<Point2d> pending_goal_;
+  SteadyClock::time_point pending_until_;
+  std::optional<Point2d> failed_goal_;
+  SteadyClock::time_point last_retry_;
 
   SteadyClock::time_point start_time_;
   SteadyClock::time_point last_tick_;
@@ -327,6 +408,8 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
   rclcpp::Subscription<std_msgs::msg::Header>::SharedPtr cancel_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr manual_sub_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr route_reject_sub_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr localization_lost_sub_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 

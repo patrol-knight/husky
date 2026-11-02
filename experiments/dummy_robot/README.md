@@ -48,26 +48,35 @@ stateDiagram-v2
     navigate --> navigate : goal (reroute)
     navigate --> reach : route fully traversed
     reach --> ready : 0.2 s later, published once
-    ready --> failure : goal off the lanelet map
-    navigate --> failure : goal off the lanelet map
+    ready --> failure : route rejected
+    navigate --> failure : route rejected
     failure --> navigate : routable goal
-    failure --> ready : cancel
+    failure --> ready : cancel, or a retry plans (no driving)
+    failure --> manual : /dummy_robot/manual true
     navigate --> ready : cancel
+    ready --> notready : /dummy_robot/localization_lost true
+    navigate --> notready : /dummy_robot/localization_lost true (route cleared)
     ready --> manual : /dummy_robot/manual true
     navigate --> manual : /dummy_robot/manual true (route cleared)
+    notready --> manual : /dummy_robot/manual true
     manual --> ready : /dummy_robot/manual false
 ```
 
 - `/localization/kinematic_state` is only published once "localized" (after `init_delay_sec`), like Autoware. Until then the robot shows offline in Mission Manager.
-- A goal while `notready` or `manual` is ignored, and so is a manual takeover while `failure`, as on the real robot.
+- A goal while `notready` or `manual` is ignored, as on the real robot. A manual takeover gets the robot out of `failure`: the operator drives it clear and releases it to `ready`.
+- A goal is a route request that takes `route_request_sec` (0.5 s). A goal that arrives while one is in flight is dropped with a log warning and no feedback, like Autoware's adaptor.
+- A route is rejected when the goal is off the lanelet map or `/dummy_robot/route_reject` is true. The failed goal is retried from the current pose once per second; when a retry plans, the robot goes back to `ready` without driving, like the adaptor.
+- `/dummy_robot/localization_lost` true stops `/localization/kinematic_state` (the robot shows offline after `stale_timeout_sec`), drops the route and reports `notready`. The real robot's route handling here is assumed, not taken from Autoware.
 - `/robot_status` is published at 5 Hz and on every change (reliable, transient-local). `reach` is published once.
 
 `aggregator_node` turns this into `operational_state`: `notready`, `idle`, `navigating`, `arrived` (held through `ready` until the next state), `manual`, `failure`.
 
-To fake a joystick takeover:
+Test hooks (`false` to release):
 
 ```bash
-ros2 topic pub --once /dummy_robot/manual std_msgs/msg/Bool "{data: true}"   # false to release
+ros2 topic pub --once /dummy_robot/manual std_msgs/msg/Bool "{data: true}"             # joystick takeover
+ros2 topic pub --once /dummy_robot/route_reject std_msgs/msg/Bool "{data: true}"       # planner rejects routes
+ros2 topic pub --once /dummy_robot/localization_lost std_msgs/msg/Bool "{data: true}"  # localization lost
 ```
 
 ### Command lifecycle
@@ -91,6 +100,8 @@ Only one `navigate_to_goal` is outstanding at a time. A new one replaces the las
 | `/planning/mission_planning/goal` | `geometry_msgs/PoseStamped` | sub | Autoware adaptor |
 | `/husky/cancel` | `std_msgs/Header` | sub | state machine node |
 | `/dummy_robot/manual` | `std_msgs/Bool` | sub | (test hook, stands in for the joystick) |
+| `/dummy_robot/route_reject` | `std_msgs/Bool` | sub | (test hook, planner rejecting routes) |
+| `/dummy_robot/localization_lost` | `std_msgs/Bool` | sub | (test hook, localization lost) |
 
 ### ROS domain
 
