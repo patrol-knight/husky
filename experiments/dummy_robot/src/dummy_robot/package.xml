@@ -1,10 +1,11 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>dummy_robot</name>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
   <description>
-    Lanelet-aware fake robot: plans a route across the lanelet2 map to a goal
-    on /dummy_robot/goal and drives along it at a constant speed.
+    Lanelet-aware fake Husky: plans a route across the lanelet2 map to a goal
+    on /planning/mission_planning/goal and drives along it at a constant speed,
+    on the same topics and /robot_status values as the real robot.
   </description>
 
   <maintainer email="devnull@example.com">zenoh_bridge maintainers</maintainer>
@@ -15,6 +16,7 @@
   <depend>rclcpp</depend>
   <depend>nav_msgs</depend>
   <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>lanelet2_core</depend>
   <depend>lanelet2_io</depend>

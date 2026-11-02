@@ -26,6 +26,9 @@ public:
 
   std::size_t lanelet_count() const;
 
+  // Distance from (x, y) to the nearest lanelet; 0 inside one. Infinity on an empty map.
+  double distance_to_map(double x, double y) const;
+
 private:
   std::optional<lanelet::ConstLanelet> nearest_lanelet(double x, double y) const;
 

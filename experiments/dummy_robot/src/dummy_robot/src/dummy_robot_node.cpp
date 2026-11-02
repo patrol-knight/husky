@@ -9,12 +9,16 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
-#include <std_msgs/msg/float32.hpp>
+#include <sensor_msgs/msg/battery_state.hpp>
+#include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/header.hpp>
 #include <std_msgs/msg/string.hpp>
 
 #include "dummy_robot/lanelet_router.hpp"
 
+// Stand-in for the Husky: the same topics, types and /robot_status values as
+// Autoware + robot_state + the Clearpath driver, so aggregator_node and
+// zenoh_bridge_node run unchanged against it.
 namespace dummy_robot
 {
 
@@ -22,8 +26,42 @@ namespace
 {
 
 constexpr double kArrivalToleranceM = 0.3;
+constexpr double kStatusPeriodSec = 0.2;  // robot_state: 5 Hz
+constexpr double kReachHoldSec = 0.2;     // robot_state: "reach" once, "ready" 0.2 s later
+constexpr double kBatteryPeriodSec = 1.0;
 
 using SteadyClock = std::chrono::steady_clock;
+
+double seconds_between(SteadyClock::time_point from, SteadyClock::time_point to)
+{
+  return std::chrono::duration<double>(to - from).count();
+}
+
+double wrap_angle(double angle)
+{
+  return std::atan2(std::sin(angle), std::cos(angle));
+}
+
+enum class Mode
+{
+  kNotReady,
+  kReady,
+  kNavigate,
+  kFailure,
+  kManual,
+};
+
+const char * status_name(Mode mode)
+{
+  switch (mode) {
+    case Mode::kNotReady: return "notready";
+    case Mode::kReady: return "ready";
+    case Mode::kNavigate: return "navigate";
+    case Mode::kFailure: return "failure";
+    case Mode::kManual: return "manual";
+  }
+  return "notready";
+}
 
 }  // namespace
 
@@ -37,8 +75,11 @@ public:
     x_ = declare_parameter<double>("x", -55.01039897722149);
     y_ = declare_parameter<double>("y", 65.38078806758735);
     yaw_ = declare_parameter<double>("yaw", 0.0);
+    init_delay_sec_ = declare_parameter<double>("init_delay_sec", 2.0);
     battery_cycle_sec_ = declare_parameter<double>("battery_cycle_sec", 600.0);
     speed_mps_ = declare_parameter<double>("speed_mps", 1.5);
+    // Autoware rejects a goal that isn't on a lanelet; this is the slack allowed.
+    goal_map_tolerance_m_ = declare_parameter<double>("goal_map_tolerance_m", 1.0);
     const auto map_osm_path = declare_parameter<std::string>("map_osm_path", "/maps/lanelet2_map.osm");
     const auto map_projector_path =
       declare_parameter<std::string>("map_projector_path", "/maps/map_projector_info.yaml");
@@ -47,87 +88,129 @@ public:
       router_.emplace(map_osm_path, map_projector_path);
       RCLCPP_INFO(get_logger(), "Loaded %zu lanelets from %s", router_->lanelet_count(), map_osm_path.c_str());
     } catch (const std::exception & e) {
-      RCLCPP_ERROR(get_logger(), "LaneletRouter unavailable; goals will be rejected: %s", e.what());
+      RCLCPP_ERROR(get_logger(), "LaneletRouter unavailable; every goal will fail: %s", e.what());
     }
 
-    odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("/dummy_robot/odom", 10);
-    battery_pub_ = create_publisher<std_msgs::msg::Float32>("/dummy_robot/battery_percent", 10);
-    state_pub_ = create_publisher<std_msgs::msg::String>("/dummy_robot/operational_state", 10);
+    // Autoware localization: published only once initialized.
+    odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("/localization/kinematic_state", 10);
+    // Clearpath BMS.
+    battery_pub_ = create_publisher<sensor_msgs::msg::BatteryState>("/husky/platform/bms/state", 10);
+    // robot_state: reliable + transient-local.
+    status_pub_ = create_publisher<std_msgs::msg::String>(
+      "/robot_status", rclcpp::QoS(1).reliable().transient_local());
+
     goal_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
-      "/dummy_robot/goal", 10, [this](geometry_msgs::msg::PoseStamped::ConstSharedPtr msg) {on_goal(*msg);});
+      "/planning/mission_planning/goal", 10,
+      [this](geometry_msgs::msg::PoseStamped::ConstSharedPtr msg) {on_goal(*msg);});
     cancel_sub_ = create_subscription<std_msgs::msg::Header>(
-      "/dummy_robot/cancel", 10, [this](std_msgs::msg::Header::ConstSharedPtr msg) {on_cancel(*msg);});
+      "/husky/cancel", 10, [this](std_msgs::msg::Header::ConstSharedPtr) {on_cancel();});
+    // Test hook in place of a joystick: true = takeover, false = released.
+    manual_sub_ = create_subscription<std_msgs::msg::Bool>(
+      "/dummy_robot/manual", 10, [this](std_msgs::msg::Bool::ConstSharedPtr msg) {on_manual(msg->data);});
 
     start_time_ = SteadyClock::now();
     last_tick_ = start_time_;
+    last_status_publish_ = start_time_;
+    last_battery_publish_ = start_time_;
+    publish_status(status_name(mode_));
     timer_ = create_wall_timer(
       std::chrono::duration<double>(1.0 / update_rate_hz), [this]() {tick();});
 
-    RCLCPP_INFO(get_logger(), "dummy_robot_node started at (%.2f, %.2f)", x_, y_);
+    RCLCPP_INFO(
+      get_logger(), "dummy_robot_node started at (%.2f, %.2f); localizing for %.1f s", x_, y_,
+      init_delay_sec_);
   }
 
 private:
-  // goal and cancel share one monotonic sequence (header.stamp.sec) stamped by
-  // zenoh_bridge, since DDS doesn't order delivery across two topics.
-  bool accept_seq(int32_t seq, const char * kind)
-  {
-    if (seq <= last_seq_) {
-      RCLCPP_WARN(get_logger(), "Ignoring out-of-order/stale %s (seq=%d <= %d)", kind, seq, last_seq_);
-      return false;
-    }
-    last_seq_ = seq;
-    return true;
-  }
-
   void on_goal(const geometry_msgs::msg::PoseStamped & msg)
   {
-    if (!accept_seq(msg.header.stamp.sec, "goal")) {
+    if (mode_ == Mode::kNotReady || mode_ == Mode::kManual) {
+      RCLCPP_WARN(get_logger(), "Ignoring goal while %s", status_name(mode_));
       return;
     }
     const double gx = msg.pose.position.x;
     const double gy = msg.pose.position.y;
-    if (!router_) {
-      RCLCPP_ERROR(get_logger(), "Rejecting goal: map/lanelet2 unavailable");
-      return;
-    }
 
-    auto path = router_->plan_route(x_, y_, gx, gy);
+    std::optional<std::vector<Point2d>> path;
+    if (router_ && router_->distance_to_map(gx, gy) <= goal_map_tolerance_m_) {
+      path = router_->plan_route(x_, y_, gx, gy);
+    }
     if (!path || path->empty()) {
-      RCLCPP_WARN(get_logger(), "No route to goal (%.2f, %.2f); ignoring", gx, gy);
+      // Like Autoware's rejected route: failure until a cancel or a routable goal.
+      RCLCPP_WARN(get_logger(), "No route to goal (%.2f, %.2f): failure", gx, gy);
+      clear_route();
+      reach_until_.reset();
+      set_mode(Mode::kFailure);
       return;
     }
 
+    // Covers ready, arrived (ready after reach), rerouting while navigating, and failure.
     path_ = std::move(*path);
     path_index_ = 0;
-    operational_state_ = "navigating";
+    reach_until_.reset();
+    set_mode(Mode::kNavigate);
     RCLCPP_INFO(get_logger(), "New goal (%.2f, %.2f): %zu-point route", gx, gy, path_.size());
   }
 
-  void on_cancel(const std_msgs::msg::Header & msg)
+  void on_cancel()
   {
-    if (!accept_seq(msg.stamp.sec, "cancel")) {
-      return;
+    clear_route();
+    if (mode_ == Mode::kNavigate || mode_ == Mode::kFailure) {
+      set_mode(Mode::kReady);
     }
-    path_.clear();
-    path_index_ = 0;
-    operational_state_ = "idle";
-    RCLCPP_INFO(get_logger(), "Navigation cancelled; halted at (%.2f, %.2f)", x_, y_);
+    RCLCPP_INFO(get_logger(), "Cancel: route cleared at (%.2f, %.2f)", x_, y_);
+  }
+
+  void on_manual(bool active)
+  {
+    if (active) {
+      if (mode_ == Mode::kFailure) {
+        RCLCPP_WARN(get_logger(), "Ignoring manual takeover while failure (as robot_state does)");
+        return;
+      }
+      // robot_state cancels the route on a takeover.
+      clear_route();
+      reach_until_.reset();
+      set_mode(Mode::kManual);
+    } else if (mode_ == Mode::kManual) {
+      set_mode(initialized() ? Mode::kReady : Mode::kNotReady);
+    }
   }
 
   void tick()
   {
     const auto now = SteadyClock::now();
-    const double dt = std::chrono::duration<double>(now - last_tick_).count();
+    const double dt = seconds_between(last_tick_, now);
     last_tick_ = now;
+
+    if (mode_ == Mode::kNotReady && initialized()) {
+      set_mode(Mode::kReady);
+    }
+
+    const double yaw_before = yaw_;
     advance(dt);
-    publish_odom();
-    publish_battery(std::chrono::duration<double>(now - start_time_).count());
-    publish_operational_state();
+    if (initialized()) {
+      publish_odom(dt > 0.0 ? wrap_angle(yaw_ - yaw_before) / dt : 0.0);
+    }
+
+    if (seconds_between(last_battery_publish_, now) >= kBatteryPeriodSec) {
+      last_battery_publish_ = now;
+      publish_battery(seconds_between(start_time_, now));
+    }
+
+    if (reach_until_) {
+      if (now >= *reach_until_) {
+        reach_until_.reset();
+        publish_status(status_name(mode_));
+      }
+    } else if (seconds_between(last_status_publish_, now) >= kStatusPeriodSec) {
+      publish_status(status_name(mode_));
+    }
   }
 
   void advance(double dt)
   {
-    if (operational_state_ != "navigating" || path_.empty()) {
+    if (mode_ != Mode::kNavigate || path_.empty()) {
       return;
     }
 
@@ -150,61 +233,100 @@ private:
     }
 
     if (path_index_ >= path_.size()) {
-      operational_state_ = "arrived";
-      path_.clear();
+      clear_route();
+      mode_ = Mode::kReady;
+      // "reach" once; tick() sends "ready" kReachHoldSec later.
+      publish_status("reach");
+      reach_until_ = SteadyClock::now() + std::chrono::duration_cast<SteadyClock::duration>(
+        std::chrono::duration<double>(kReachHoldSec));
+      RCLCPP_INFO(get_logger(), "Reached goal at (%.2f, %.2f)", x_, y_);
     }
   }
 
-  void publish_odom()
+  bool initialized() const
+  {
+    return seconds_between(start_time_, SteadyClock::now()) >= init_delay_sec_;
+  }
+
+  void clear_route()
+  {
+    path_.clear();
+    path_index_ = 0;
+  }
+
+  void set_mode(Mode mode)
+  {
+    if (mode == mode_) {
+      return;
+    }
+    mode_ = mode;
+    if (!reach_until_) {
+      publish_status(status_name(mode_));  // on change, like robot_state
+    }
+  }
+
+  void publish_status(const char * status)
+  {
+    std_msgs::msg::String msg;
+    msg.data = status;
+    status_pub_->publish(msg);
+    last_status_publish_ = SteadyClock::now();
+  }
+
+  void publish_odom(double yaw_rate)
   {
     nav_msgs::msg::Odometry msg;
     msg.header.stamp = now();
     msg.header.frame_id = "map";
+    msg.child_frame_id = "base_link";
     msg.pose.pose.position.x = x_;
     msg.pose.pose.position.y = y_;
     msg.pose.pose.orientation.z = std::sin(yaw_ / 2.0);
     msg.pose.pose.orientation.w = std::cos(yaw_ / 2.0);
-    const double speed = operational_state_ == "navigating" ? speed_mps_ : 0.0;
-    msg.twist.twist.linear.x = speed * std::cos(yaw_);
-    msg.twist.twist.linear.y = speed * std::sin(yaw_);
+    // Body frame, as Autoware's kinematic_state.
+    msg.twist.twist.linear.x = mode_ == Mode::kNavigate ? speed_mps_ : 0.0;
+    msg.twist.twist.angular.z = yaw_rate;
     odom_pub_->publish(msg);
   }
 
   void publish_battery(double elapsed_sec)
   {
     const double cycle_pos = std::fmod(elapsed_sec, battery_cycle_sec_) / battery_cycle_sec_;
-    std_msgs::msg::Float32 msg;
-    msg.data = static_cast<float>(100.0 - cycle_pos * 80.0);  // 100 -> 20, repeating
+    sensor_msgs::msg::BatteryState msg;
+    msg.header.stamp = now();
+    msg.percentage = static_cast<float>(1.0 - cycle_pos * 0.8);  // 1.0 -> 0.2, repeating
+    msg.voltage = static_cast<float>(24.0 + 4.0 * msg.percentage);
+    msg.power_supply_status = sensor_msgs::msg::BatteryState::POWER_SUPPLY_STATUS_DISCHARGING;
+    msg.power_supply_technology = sensor_msgs::msg::BatteryState::POWER_SUPPLY_TECHNOLOGY_LION;
+    msg.present = true;
     battery_pub_->publish(msg);
-  }
-
-  void publish_operational_state()
-  {
-    std_msgs::msg::String msg;
-    msg.data = operational_state_;
-    state_pub_->publish(msg);
   }
 
   double x_;
   double y_;
   double yaw_;
+  double init_delay_sec_;
   double battery_cycle_sec_;
   double speed_mps_;
+  double goal_map_tolerance_m_;
 
   std::optional<LaneletRouter> router_;
-  std::string operational_state_ = "idle";
+  Mode mode_ = Mode::kNotReady;
   std::vector<Point2d> path_;
   std::size_t path_index_ = 0;
-  int32_t last_seq_ = 0;
+  std::optional<SteadyClock::time_point> reach_until_;
 
   SteadyClock::time_point start_time_;
   SteadyClock::time_point last_tick_;
+  SteadyClock::time_point last_status_publish_;
+  SteadyClock::time_point last_battery_publish_;
 
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
-  rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr battery_pub_;
-  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr state_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr battery_pub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_pub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
   rclcpp::Subscription<std_msgs::msg::Header>::SharedPtr cancel_sub_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr manual_sub_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 

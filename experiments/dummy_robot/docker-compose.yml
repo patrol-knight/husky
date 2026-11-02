@@ -1,5 +1,6 @@
 # Dummy robot test stack. Run via ./launch.sh (every service has a profile, so a bare `docker compose up` starts nothing).
 # zenohd comes from mission_manager.
+# ROS_DOMAIN_ID defaults to 42: the dummy uses the real Husky's topic names, so keep it off the robot's domain.
 services:
   dummy_robot:
     profiles: ["dummy_robot"]
@@ -7,7 +8,7 @@ services:
       context: .
       dockerfile: docker/dummy_robot.Dockerfile
     environment:
-      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
     volumes:
       - ./config/dummy_robot.yaml:/config/dummy_robot.yaml:ro
       - ${MAP_DIR:-./maps}:/maps:ro
@@ -25,7 +26,7 @@ services:
       - /opt/zenoh_bridge_files/launch/bringup.launch.py
       - device_config:=/config/zenoh_bridge.yaml
     environment:
-      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
       - WEBRTC_ANNOUNCED_IP=${WEBRTC_ANNOUNCED_IP:-}
       - WEBRTC_ICE_PORT_MIN=${WEBRTC_ICE_PORT:-50000}
       - WEBRTC_ICE_PORT_MAX=${WEBRTC_ICE_PORT:-50000}
@@ -47,7 +48,7 @@ services:
     # librealsense needs raw USB access
     privileged: true
     environment:
-      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
     volumes:
       - ../../launch:/husky/launch:ro
       - ../../config:/husky/config:ro

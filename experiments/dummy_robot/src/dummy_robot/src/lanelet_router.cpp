@@ -142,6 +142,15 @@ std::size_t LaneletRouter::lanelet_count() const
   return map_->laneletLayer.size();
 }
 
+double LaneletRouter::distance_to_map(double x, double y) const
+{
+  const auto candidates = lanelet::geometry::findNearest(map_->laneletLayer, lanelet::BasicPoint2d(x, y), 1);
+  if (candidates.empty()) {
+    return std::numeric_limits<double>::infinity();
+  }
+  return candidates.front().first;
+}
+
 std::optional<lanelet::ConstLanelet> LaneletRouter::nearest_lanelet(double x, double y) const
 {
   const auto candidates = lanelet::geometry::findNearest(map_->laneletLayer, lanelet::BasicPoint2d(x, y), 5);

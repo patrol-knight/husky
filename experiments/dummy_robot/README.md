@@ -1,13 +1,13 @@
 # Dummy Robot
 
-A stand-in for the Husky that lets you test the robot-side dataflow to Mission Manager without the real robot. `dummy_robot_node` takes Autoware's place: it plans a route on the lanelet2 map, drives along it at a constant speed and reports its state. It's a deterministic fake, not a physics simulator. Everything downstream (`aggregator_node`, `zenoh_bridge_node`) is the same code the Husky runs.
+A stand-in for the Husky that lets you test the robot-side dataflow to Mission Manager without the real robot. `dummy_robot_node` takes Autoware's place: it plans a route on the lanelet2 map, drives along it at a constant speed and reports its state on the **same topics, types and `/robot_status` values as the real Husky**, so `aggregator_node` and `zenoh_bridge_node` run with the same config on both. It's a deterministic fake, not a physics simulator. Everything downstream (`aggregator_node`, `zenoh_bridge_node`) is the same code the Husky runs.
 
 Runs on x86_64 and on the Orin (arm64).
 
 ```mermaid
 flowchart LR
     Cam["realsense2_camera_node"] -- image --> Bridge
-    Dummy["dummy_robot_node"] -- "odom, battery, state" --> Agg["aggregator_node"]
+    Dummy["dummy_robot_node"] -- "kinematic_state, bms/state, /robot_status" --> Agg["aggregator_node"]
     Agg -- "/robot/state" --> Bridge["zenoh_bridge_node"]
     Bridge -. "goal, cancel" .-> Dummy
     Bridge <-- "Zenoh :7447<br/>WebRTC :50000/udp" --> MM[["Mission Manager"]]
@@ -38,23 +38,37 @@ The lanelet2 map is the robot's own copy in `maps/`, the same way a real robot c
 
 ## State machine
 
+Mirrors the Husky's `robot_state` node (`/robot_status`):
+
 ```mermaid
 stateDiagram-v2
-    [*] --> idle
-    idle --> navigating : goal
-    arrived --> navigating : goal
-    navigating --> arrived : route fully traversed 
-    navigating --> idle : cancel
-    arrived --> idle : cancel
+    [*] --> notready
+    notready --> ready : init_delay_sec (2 s) elapsed
+    ready --> navigate : goal
+    navigate --> navigate : goal (reroute)
+    navigate --> reach : route fully traversed
+    reach --> ready : 0.2 s later, published once
+    ready --> failure : goal off the lanelet map
+    navigate --> failure : goal off the lanelet map
+    failure --> navigate : routable goal
+    failure --> ready : cancel
+    navigate --> ready : cancel
+    ready --> manual : /dummy_robot/manual true
+    navigate --> manual : /dummy_robot/manual true (route cleared)
+    manual --> ready : /dummy_robot/manual false
 ```
 
-These don't change the state:
+- `/localization/kinematic_state` is only published once "localized" (after `init_delay_sec`), like Autoware. Until then the robot shows offline in Mission Manager.
+- A goal while `notready` or `manual` is ignored, and so is a manual takeover while `failure`, as on the real robot.
+- `/robot_status` is published at 5 Hz and on every change (reliable, transient-local). `reach` is published once.
 
-- a goal with no route on the map: logged and ignored
-- the map failed to load at startup: every goal is rejected
-- a stale goal or cancel (see Sequencing): logged and ignored
+`aggregator_node` turns this into `operational_state`: `notready`, `idle`, `navigating`, `arrived` (held through `ready` until the next state), `manual`, `failure`.
 
-`operational_state` is published every tick (10 Hz), whether or not it changed. zenoh_bridge only reacts to real transitions, so a replacement stack can publish the same way.
+To fake a joystick takeover:
+
+```bash
+ros2 topic pub --once /dummy_robot/manual std_msgs/msg/Bool "{data: true}"   # false to release
+```
 
 ### Command lifecycle
 
@@ -62,31 +76,26 @@ zenoh_bridge reports each command on `devices/{device_id}/events`:
 
 | Command | Results |
 |---|---|
-| `navigate_to_goal` | `accepted` → `running` (goal published) → `succeeded` when `operational_state` changes to `arrived`, or `failed` after 120 s |
+| `navigate_to_goal` | `accepted` → `running` (goal published) → `succeeded` when `operational_state` changes to `arrived`. No timeout |
 | `cancel_navigation` | `accepted` → `succeeded` once the cancel is published. A pending `navigate_to_goal` is dropped |
 
 Only one `navigate_to_goal` is outstanding at a time. A new one replaces the last.
 
-Mission Manager sends one waypoint at a time and only sends the next one after the robot has arrived. If no arrival comes within `navigation_timeout_sec` (60 s), Mission Manager re-sends the same waypoint. The robot may still be driving when that happens, so a resent goal has to replace the current route cleanly.
-
-### Sequencing
-
-zenoh_bridge stamps goal and cancel with one shared sequence number in `header.stamp.sec` (not wall-clock time). The node ignores anything that isn't newer than the last one it applied, because DDS doesn't keep messages in order across two topics. Without this, a fast pause-then-resume could apply the resume's goal before the pause's cancel.
-
 ### Topics
 
-| Topic | Type | |
-|---|---|---|
-| `/dummy_robot/odom` | `nav_msgs/Odometry` (`frame_id: map`) | pub |
-| `/dummy_robot/battery_percent` | `std_msgs/Float32` | pub |
-| `/dummy_robot/operational_state` | `std_msgs/String`: `idle` / `navigating` / `arrived` | pub |
-| `/dummy_robot/goal` | `geometry_msgs/PoseStamped` | sub |
-| `/dummy_robot/cancel` | `std_msgs/Header` | sub |
+| Topic | Type | | Real Husky |
+|---|---|---|---|
+| `/localization/kinematic_state` | `nav_msgs/Odometry` (`map`, body-frame twist) | pub | Autoware |
+| `/husky/platform/bms/state` | `sensor_msgs/BatteryState` (`percentage` 0–1) | pub | Clearpath driver |
+| `/robot_status` | `std_msgs/String`: `notready` / `ready` / `navigate` / `reach` / `manual` / `failure` | pub | `robot_state` |
+| `/planning/mission_planning/goal` | `geometry_msgs/PoseStamped` | sub | Autoware adaptor |
+| `/husky/cancel` | `std_msgs/Header` | sub | state machine node |
+| `/dummy_robot/manual` | `std_msgs/Bool` | sub | (test hook, stands in for the joystick) |
 
-## Swapping in Autoware or the real robot
+### ROS domain
 
-To plug in seamlessly, the new stack has to:
+The containers default to `ROS_DOMAIN_ID=42`. The topic names are the real robot's, and DDS discovery crosses the LAN, so on domain 0 a dummy on your laptop would publish into the Husky. Set `ROS_DOMAIN_ID` to override.
 
-- publish pose, velocity, battery and an `idle` / `navigating` / `arrived` state, which it maps from its own states. Point the aggregator at those topics in `modules/zenoh_bridge/src/aggregator/config/sources.yaml`.
-- accept a goal pose and a cancel, and drop stale ones using the sequence number above. The goal/cancel topic names live in `navigation_route()` in `modules/zenoh_bridge/src/zenoh_bridge/src/zenoh_bridge.cpp`.
-- switch to `arrived` only once it's actually at the goal. That transition is what reports `succeeded`.
+## Keeping it in sync with the real robot
+
+If the Husky's topics or `/robot_status` values change, change `dummy_robot_node.cpp` to match, together with `modules/zenoh_bridge/src/aggregator/config/sources.yaml` (topics, status map) and `navigation_route()` in `modules/zenoh_bridge/src/zenoh_bridge/src/zenoh_bridge.cpp` (goal/cancel).
