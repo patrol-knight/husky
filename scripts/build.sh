@@ -13,6 +13,7 @@
 #                  patrolknight_msgs, which --deps clones into its src/
 #                  (modules/zenoh_bridge/scripts/install.sh).
 #   skeleton       skeleton_detection (needs patrolknight_msgs from zenoh_bridge).
+#   state_machine  Husky robot status and mode publisher.
 #
 # Building one group leaves the other's already-installed packages in place.
 #
@@ -22,6 +23,7 @@
 #   ./scripts/build.sh --deps clearpath    # rosdep-install its dependencies first
 #   ./scripts/build.sh --deps zenoh_bridge # run zenoh_bridge's install.sh first
 #   ./scripts/build.sh --deps skeleton     # download skeleton_detection's models first
+#   ./scripts/build.sh state_machine       # rebuild the state machine only
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -33,11 +35,12 @@ declare -A GROUP_PATHS=(
   # once --deps has cloned it.
   [zenoh_bridge]="modules/zenoh_bridge/src/*"
   [skeleton]="modules/skeleton_detection"
+  [state_machine]="modules/state_machine"
 )
-ALL_GROUPS=(clearpath zenoh_bridge skeleton)
+ALL_GROUPS=(clearpath zenoh_bridge skeleton state_machine)
 
 usage() {
-  echo "Usage: $(basename "$0") [--deps] [clearpath] [zenoh_bridge] [skeleton]" >&2
+  echo "Usage: $(basename "$0") [--deps] [clearpath] [zenoh_bridge] [skeleton] [state_machine]" >&2
   exit 1
 }
 

@@ -35,6 +35,11 @@ def generate_launch_description():
             description="skeleton_detection rtmo_node (consumes the RealSense RGBD topic)",
         ),
         DeclareLaunchArgument(
+            "state_machine",
+            default_value="true",
+            description="Husky robot status and mode publisher",
+        ),
+        DeclareLaunchArgument(
             "foxglove",
             default_value="false",
             description="Dev: foxglove_bridge on ws://<orin-ip>:8765",
@@ -68,6 +73,13 @@ def generate_launch_description():
                 "models_dir": os.path.join(REPO_ROOT, "modules/skeleton_detection/models"),
             }.items(),
             condition=IfCondition(LaunchConfiguration("skeleton")),
+        ),
+        Node(
+            package="state_machine",
+            executable="state_machine_node",
+            name="state_machine",
+            output="screen",
+            condition=IfCondition(LaunchConfiguration("state_machine")),
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(REPO_ROOT, "launch/sensors.launch.py")),
