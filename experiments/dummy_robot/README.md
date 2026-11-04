@@ -7,7 +7,7 @@ Runs on x86_64 and on the Orin (arm64).
 ```mermaid
 flowchart LR
     Cam["realsense2_camera_node"] -- image --> Bridge
-    Dummy["dummy_robot_node"] -- "kinematic_state, bms/state, /autoware/robot_status" --> Agg["aggregator_node"]
+    Dummy["dummy_robot_node"] -- "kinematic_state, bms/state, /autoware/robot_status, /robot_mode" --> Agg["aggregator_node"]
     Agg -- "/robot/state" --> Bridge["zenoh_bridge_node"]
     Bridge -. "goal, cancel" .-> Dummy
     Bridge <-- "Zenoh :7447<br/>WebRTC :50000/udp" --> MM[["Mission Manager"]]
@@ -98,6 +98,7 @@ Only one `navigate_to_goal` is outstanding at a time. A new one replaces the las
 | `/husky/platform/odom` | `nav_msgs/Odometry` (body-frame twist; always, localized or not) | pub | Clearpath `diff_drive_controller` |
 | `/husky/platform/bms/state` | `sensor_msgs/BatteryState` (`percentage` 0–1) | pub | Clearpath driver |
 | `/autoware/robot_status` | `std_msgs/String`: `notready` / `ready` / `navigate` / `reach` / `manual` / `failure` | pub | `robot_state` |
+| `/robot_mode` | `std_msgs/String`: `auto` while navigating, `manual` while manual, otherwise `none` | pub | `state_machine` |
 | `/planning/mission_planning/goal` | `geometry_msgs/PoseStamped` | sub | Autoware adaptor |
 | `/husky/cancel` | `std_msgs/Header` | sub | state machine node |
 | `/dummy_robot/manual` | `std_msgs/Bool` | sub | (test hook, stands in for the joystick) |

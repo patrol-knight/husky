@@ -107,6 +107,8 @@ public:
     // robot_state: reliable + transient-local.
     status_pub_ = create_publisher<std_msgs::msg::String>(
       "/autoware/robot_status", rclcpp::QoS(1).reliable().transient_local());
+    mode_pub_ = create_publisher<std_msgs::msg::String>(
+      "/robot_mode", rclcpp::QoS(1).reliable().transient_local());
 
     goal_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
       "/planning/mission_planning/goal", 10,
@@ -348,6 +350,10 @@ private:
     std_msgs::msg::String msg;
     msg.data = status;
     status_pub_->publish(msg);
+    // What state_machine derives on the Husky.
+    std_msgs::msg::String mode;
+    mode.data = mode_ == Mode::kManual ? "manual" : mode_ == Mode::kNavigate ? "auto" : "none";
+    mode_pub_->publish(mode);
     last_status_publish_ = SteadyClock::now();
   }
 
@@ -423,6 +429,7 @@ private:
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr wheel_odom_pub_;
   rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr battery_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_pub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr mode_pub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
   rclcpp::Subscription<std_msgs::msg::Header>::SharedPtr cancel_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr manual_sub_;
