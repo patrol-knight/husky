@@ -1,6 +1,10 @@
 projector_type: TransverseMercator
 vertical_datum: WGS84
+mgrs_grid: ""
+
 map_origin:
-  latitude: 37.384707  # [deg]
-  longitude: -122.032313  # [deg]
-  altitude: -10.936534  # [m]
+  latitude: 40.44374890693742
+  longitude: -79.94547730185674
+  altitude: 0.0
+
+scale_factor: 0.9996

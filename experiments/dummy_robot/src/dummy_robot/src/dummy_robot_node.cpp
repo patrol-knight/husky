@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/battery_state.hpp>
@@ -17,8 +18,9 @@
 #include "dummy_robot/lanelet_router.hpp"
 
 // Stand-in for the Husky: the same topics, types and /autoware/robot_status values as
-// Autoware + robot_state + the Clearpath driver, so aggregator_node and
-// zenoh_bridge_node run unchanged against it.
+// Autoware (robot_state, the planning adaptor, the vehicle interface) and the
+// Clearpath driver, so aggregator_node, zenoh_bridge_node and state_machine
+// run unchanged against it.
 namespace dummy_robot
 {
 
@@ -30,6 +32,8 @@ constexpr double kStatusPeriodSec = 0.2;  // robot_state: 5 Hz
 constexpr double kReachHoldSec = 0.2;     // robot_state: "reach" once, "ready" 0.2 s later
 constexpr double kBatteryPeriodSec = 1.0;
 constexpr double kRetryPeriodSec = 1.0;
+constexpr double kManualCommandTimeoutSec = 0.25;  // vehicle interface: command_timeout_s
+constexpr double kManualHoldSec = 1.0;             // vehicle interface: manual_hold_s
 
 using SteadyClock = std::chrono::steady_clock;
 
@@ -54,7 +58,6 @@ enum class Mode
   kReady,
   kNavigate,
   kFailure,
-  kManual,
 };
 
 const char * status_name(Mode mode)
@@ -64,7 +67,6 @@ const char * status_name(Mode mode)
     case Mode::kReady: return "ready";
     case Mode::kNavigate: return "navigate";
     case Mode::kFailure: return "failure";
-    case Mode::kManual: return "manual";
   }
   return "notready";
 }
@@ -107,17 +109,17 @@ public:
     // robot_state: reliable + transient-local.
     status_pub_ = create_publisher<std_msgs::msg::String>(
       "/autoware/robot_status", rclcpp::QoS(1).reliable().transient_local());
-    mode_pub_ = create_publisher<std_msgs::msg::String>(
-      "/robot_mode", rclcpp::QoS(1).reliable().transient_local());
 
     goal_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
       "/planning/mission_planning/goal", 10,
       [this](geometry_msgs::msg::PoseStamped::ConstSharedPtr msg) {on_goal(*msg);});
     cancel_sub_ = create_subscription<std_msgs::msg::Header>(
       "/husky/cancel", 10, [this](std_msgs::msg::Header::ConstSharedPtr) {on_cancel();});
-    // Test hook in place of a joystick: true = takeover, false = released.
-    manual_sub_ = create_subscription<std_msgs::msg::Bool>(
-      "/dummy_robot/manual", 10, [this](std_msgs::msg::Bool::ConstSharedPtr msg) {on_manual(msg->data);});
+    // Joystick / RC teleop, as the vehicle interface takes them over.
+    for (const char * topic : {"/husky/joy_teleop/cmd_vel", "/husky/rc_teleop/cmd_vel"}) {
+      manual_subs_.push_back(create_subscription<geometry_msgs::msg::Twist>(
+        topic, 10, [this](geometry_msgs::msg::Twist::ConstSharedPtr msg) {on_manual(*msg);}));
+    }
     route_reject_sub_ = create_subscription<std_msgs::msg::Bool>(
       "/dummy_robot/route_reject", 10,
       [this](std_msgs::msg::Bool::ConstSharedPtr msg) {route_reject_ = msg->data;});
@@ -141,8 +143,13 @@ public:
 private:
   void on_goal(const geometry_msgs::msg::PoseStamped & msg)
   {
-    if (mode_ == Mode::kNotReady || mode_ == Mode::kManual) {
-      RCLCPP_WARN(get_logger(), "Ignoring goal while %s", status_name(mode_));
+    if (mode_ == Mode::kNotReady) {
+      RCLCPP_WARN(get_logger(), "Ignoring goal while notready");
+      return;
+    }
+    if (manual_active(SteadyClock::now())) {
+      // The vehicle interface cancels any route while the joystick is in use.
+      RCLCPP_WARN(get_logger(), "Ignoring goal during a manual takeover");
       return;
     }
     if (pending_goal_) {
@@ -220,18 +227,26 @@ private:
     RCLCPP_INFO(get_logger(), "Cancel: route cleared at (%.2f, %.2f)", x_, y_);
   }
 
-  void on_manual(bool active)
+  // Vehicle interface: any teleop command disables autonomy and cancels the
+  // route (manual_route_cancel); robot_state then reports ready. A failure
+  // stays: the adaptor keeps retrying the failed goal under the joystick.
+  void on_manual(const geometry_msgs::msg::Twist & cmd)
   {
-    if (active) {
-      // robot_state cancels the route on a takeover, and the operator drives out of a failure.
+    last_manual_ = SteadyClock::now();
+    manual_cmd_ = cmd;
+    if (pending_goal_ || !path_.empty()) {
       pending_goal_.reset();
-      failed_goal_.reset();
       clear_route();
-      reach_until_.reset();
-      set_mode(Mode::kManual);
-    } else if (mode_ == Mode::kManual) {
-      set_mode(localized() ? Mode::kReady : Mode::kNotReady);
+      RCLCPP_INFO(get_logger(), "Manual takeover: route cleared at (%.2f, %.2f)", x_, y_);
     }
+    if (mode_ == Mode::kNavigate) {
+      set_mode(Mode::kReady);
+    }
+  }
+
+  bool manual_active(SteadyClock::time_point now) const
+  {
+    return last_manual_ && seconds_between(*last_manual_, now) < kManualHoldSec;
   }
 
   void on_localization_lost(bool lost)
@@ -267,7 +282,12 @@ private:
     retry_failed_goal(now);
 
     const double yaw_before = yaw_;
-    advance(dt);
+    if (last_manual_ && seconds_between(*last_manual_, now) < kManualCommandTimeoutSec) {
+      drive_manual(dt);
+    } else {
+      linear_mps_ = 0.0;
+      advance(dt);
+    }
     const double yaw_rate = dt > 0.0 ? wrap_angle(yaw_ - yaw_before) / dt : 0.0;
     publish_wheel_odom(yaw_rate);
     if (localized()) {
@@ -289,11 +309,20 @@ private:
     }
   }
 
+  void drive_manual(double dt)
+  {
+    linear_mps_ = manual_cmd_.linear.x;
+    yaw_ = wrap_angle(yaw_ + manual_cmd_.angular.z * dt);
+    x_ += linear_mps_ * std::cos(yaw_) * dt;
+    y_ += linear_mps_ * std::sin(yaw_) * dt;
+  }
+
   void advance(double dt)
   {
     if (mode_ != Mode::kNavigate || path_.empty()) {
       return;
     }
+    linear_mps_ = speed_mps_;
 
     double remaining = speed_mps_ * dt;
     while (remaining > 0.0 && path_index_ < path_.size()) {
@@ -350,10 +379,6 @@ private:
     std_msgs::msg::String msg;
     msg.data = status;
     status_pub_->publish(msg);
-    // What state_machine derives on the Husky.
-    std_msgs::msg::String mode;
-    mode.data = mode_ == Mode::kManual ? "manual" : mode_ == Mode::kNavigate ? "auto" : "none";
-    mode_pub_->publish(mode);
     last_status_publish_ = SteadyClock::now();
   }
 
@@ -368,7 +393,7 @@ private:
     msg.pose.pose.orientation.z = std::sin(yaw_ / 2.0);
     msg.pose.pose.orientation.w = std::cos(yaw_ / 2.0);
     // Body frame, as Autoware's kinematic_state.
-    msg.twist.twist.linear.x = mode_ == Mode::kNavigate ? speed_mps_ : 0.0;
+    msg.twist.twist.linear.x = linear_mps_;
     msg.twist.twist.angular.z = yaw_rate;
     odom_pub_->publish(msg);
   }
@@ -381,7 +406,7 @@ private:
     msg.header.stamp = now();
     msg.header.frame_id = "odom";
     msg.child_frame_id = "base_link";
-    msg.twist.twist.linear.x = mode_ == Mode::kNavigate ? speed_mps_ : 0.0;
+    msg.twist.twist.linear.x = linear_mps_;
     msg.twist.twist.angular.z = yaw_rate;
     wheel_odom_pub_->publish(msg);
   }
@@ -409,6 +434,9 @@ private:
   double route_request_sec_;
   bool route_reject_ = false;
   bool localization_lost_ = false;
+  double linear_mps_ = 0.0;
+  std::optional<SteadyClock::time_point> last_manual_;
+  geometry_msgs::msg::Twist manual_cmd_;
 
   std::optional<LaneletRouter> router_;
   Mode mode_ = Mode::kNotReady;
@@ -429,10 +457,9 @@ private:
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr wheel_odom_pub_;
   rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr battery_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_pub_;
-  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr mode_pub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
   rclcpp::Subscription<std_msgs::msg::Header>::SharedPtr cancel_sub_;
-  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr manual_sub_;
+  std::vector<rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr> manual_subs_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr route_reject_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr localization_lost_sub_;
   rclcpp::TimerBase::SharedPtr timer_;

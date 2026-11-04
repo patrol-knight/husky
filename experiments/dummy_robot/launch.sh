@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Start/build/stop the dummy robot containers.
 #
-#   ./launch.sh up [<node>:=false ...]   # dummy_robot, zenoh_bridge, realsense
+#   ./launch.sh up [<node>:=false ...]   # dummy_robot, state_machine, zenoh_bridge, realsense
 #   ./launch.sh build
 #   ./launch.sh down
 set -euo pipefail
@@ -13,10 +13,11 @@ BRIDGE_CONFIG="$STACK_DIR/config/zenoh_bridge.yaml"
 # node name -> compose profile name (docker-compose.yml)
 declare -A NODE_PROFILE=(
   [dummy_robot]="dummy_robot"
+  [state_machine]="state_machine"
   [zenoh_bridge]="zenoh_bridge"
   [realsense]="realsense"
 )
-ALL_PROFILES=(dummy_robot zenoh_bridge realsense)
+ALL_PROFILES=(dummy_robot state_machine zenoh_bridge realsense)
 
 usage() {
   cat >&2 <<USAGE
@@ -33,6 +34,7 @@ USAGE
 parse_node_args() {
   declare -A value=(
     [dummy_robot]="true"
+    [state_machine]="true"
     [zenoh_bridge]="true"
     [realsense]="true"
   )

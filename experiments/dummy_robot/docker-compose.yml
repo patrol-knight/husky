@@ -14,6 +14,17 @@ services:
       - ${MAP_DIR:-./maps}:/maps:ro
     restart: unless-stopped
 
+  state_machine:
+    profiles: ["state_machine"]
+    build:
+      context: .
+      dockerfile: docker/state_machine.Dockerfile
+      additional_contexts:
+        state_machine: ../../modules/state_machine
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
+    restart: unless-stopped
+
   zenoh_bridge:
     profiles: ["zenoh_bridge"]
     build:
