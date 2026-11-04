@@ -1,13 +1,13 @@
 # Dummy Robot
 
-A stand-in for the Husky that lets you test the robot-side dataflow to Mission Manager without the real robot. `dummy_robot_node` takes Autoware's place: it plans a route on the lanelet2 map, drives along it at a constant speed and reports its state on the **same topics, types and `/robot_status` values as the real Husky**, so `aggregator_node` and `zenoh_bridge_node` run with the same config on both. It's a deterministic fake, not a physics simulator. Everything downstream (`aggregator_node`, `zenoh_bridge_node`) is the same code the Husky runs.
+A stand-in for the Husky that lets you test the robot-side dataflow to Mission Manager without the real robot. `dummy_robot_node` takes Autoware's place: it plans a route on the lanelet2 map, drives along it at a constant speed and reports its state on the **same topics, types and `/autoware/robot_status` values as the real Husky**, so `aggregator_node` and `zenoh_bridge_node` run with the same config on both. It's a deterministic fake, not a physics simulator. Everything downstream (`aggregator_node`, `zenoh_bridge_node`) is the same code the Husky runs.
 
 Runs on x86_64 and on the Orin (arm64).
 
 ```mermaid
 flowchart LR
     Cam["realsense2_camera_node"] -- image --> Bridge
-    Dummy["dummy_robot_node"] -- "kinematic_state, bms/state, /robot_status" --> Agg["aggregator_node"]
+    Dummy["dummy_robot_node"] -- "kinematic_state, bms/state, /autoware/robot_status" --> Agg["aggregator_node"]
     Agg -- "/robot/state" --> Bridge["zenoh_bridge_node"]
     Bridge -. "goal, cancel" .-> Dummy
     Bridge <-- "Zenoh :7447<br/>WebRTC :50000/udp" --> MM[["Mission Manager"]]
@@ -38,7 +38,7 @@ The lanelet2 map is the robot's own copy in `maps/`, the same way a real robot c
 
 ## State machine
 
-Mirrors the Husky's `robot_state` node (`/robot_status`):
+Mirrors the Husky's `robot_state` node (`/autoware/robot_status`):
 
 ```mermaid
 stateDiagram-v2
@@ -67,7 +67,7 @@ stateDiagram-v2
 - A goal is a route request that takes `route_request_sec` (0.5 s). A goal that arrives while one is in flight is dropped with a log warning and no feedback, like Autoware's adaptor.
 - A route is rejected when the goal is off the lanelet map or `/dummy_robot/route_reject` is true. The failed goal is retried from the current pose once per second; when a retry plans, the robot goes back to `ready` without driving, like the adaptor.
 - `/dummy_robot/localization_lost` true stops `/localization/kinematic_state` (the robot shows offline after `stale_timeout_sec`), drops the route and reports `notready`. The real robot's route handling here is assumed, not taken from Autoware.
-- `/robot_status` is published at 5 Hz and on every change (reliable, transient-local). `reach` is published once.
+- `/autoware/robot_status` is published at 5 Hz and on every change (reliable, transient-local). `reach` is published once.
 
 `aggregator_node` turns this into `operational_state`: `notready`, `idle`, `navigating`, `arrived` (held through `ready` until the next state), `manual`, `failure`.
 
@@ -95,9 +95,9 @@ Only one `navigate_to_goal` is outstanding at a time. A new one replaces the las
 | Topic | Type | | Real Husky |
 |---|---|---|---|
 | `/localization/kinematic_state` | `nav_msgs/Odometry` (`map`, body-frame twist) | pub | Autoware |
-| `/husky/platform/odom/filtered` | `nav_msgs/Odometry` (body-frame twist; always, localized or not) | pub | Clearpath EKF |
+| `/husky/platform/odom` | `nav_msgs/Odometry` (body-frame twist; always, localized or not) | pub | Clearpath `diff_drive_controller` |
 | `/husky/platform/bms/state` | `sensor_msgs/BatteryState` (`percentage` 0–1) | pub | Clearpath driver |
-| `/robot_status` | `std_msgs/String`: `notready` / `ready` / `navigate` / `reach` / `manual` / `failure` | pub | `robot_state` |
+| `/autoware/robot_status` | `std_msgs/String`: `notready` / `ready` / `navigate` / `reach` / `manual` / `failure` | pub | `robot_state` |
 | `/planning/mission_planning/goal` | `geometry_msgs/PoseStamped` | sub | Autoware adaptor |
 | `/husky/cancel` | `std_msgs/Header` | sub | state machine node |
 | `/dummy_robot/manual` | `std_msgs/Bool` | sub | (test hook, stands in for the joystick) |
@@ -110,4 +110,4 @@ The containers default to `ROS_DOMAIN_ID=42`. The topic names are the real robot
 
 ## Keeping it in sync with the real robot
 
-If the Husky's topics or `/robot_status` values change, change `dummy_robot_node.cpp` to match, together with `modules/zenoh_bridge/src/aggregator/config/sources.yaml` (topics, status map) and `navigation_route()` in `modules/zenoh_bridge/src/zenoh_bridge/src/zenoh_bridge.cpp` (goal/cancel).
+If the Husky's topics or `/autoware/robot_status` values change, change `dummy_robot_node.cpp` to match, together with `modules/zenoh_bridge/src/aggregator/config/sources.yaml` (topics, status map) and `navigation_route()` in `modules/zenoh_bridge/src/zenoh_bridge/src/zenoh_bridge.cpp` (goal/cancel).

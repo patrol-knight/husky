@@ -21,3 +21,8 @@ system:
       implementation: rmw_fastrtps_cpp
       discovery: simple
     workspaces: []
+
+platform:
+  # Its only input is platform/odom, and every consumer reads platform/odom
+  # directly, so it adds nothing. Without it /husky/tf has no odom -> base_link.
+  enable_ekf: false

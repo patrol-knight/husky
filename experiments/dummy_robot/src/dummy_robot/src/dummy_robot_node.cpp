@@ -16,7 +16,7 @@
 
 #include "dummy_robot/lanelet_router.hpp"
 
-// Stand-in for the Husky: the same topics, types and /robot_status values as
+// Stand-in for the Husky: the same topics, types and /autoware/robot_status values as
 // Autoware + robot_state + the Clearpath driver, so aggregator_node and
 // zenoh_bridge_node run unchanged against it.
 namespace dummy_robot
@@ -100,13 +100,13 @@ public:
 
     // Autoware localization: published only once initialized.
     odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("/localization/kinematic_state", 10);
-    // Clearpath wheel odometry (EKF): always published, localized or not.
-    wheel_odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("/husky/platform/odom/filtered", 10);
+    // Clearpath wheel odometry (diff_drive_controller): always published, localized or not.
+    wheel_odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("/husky/platform/odom", 10);
     // Clearpath BMS.
     battery_pub_ = create_publisher<sensor_msgs::msg::BatteryState>("/husky/platform/bms/state", 10);
     // robot_state: reliable + transient-local.
     status_pub_ = create_publisher<std_msgs::msg::String>(
-      "/robot_status", rclcpp::QoS(1).reliable().transient_local());
+      "/autoware/robot_status", rclcpp::QoS(1).reliable().transient_local());
 
     goal_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
       "/planning/mission_planning/goal", 10,

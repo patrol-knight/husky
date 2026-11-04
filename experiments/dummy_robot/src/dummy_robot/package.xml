@@ -5,7 +5,7 @@
   <description>
     Lanelet-aware fake Husky: plans a route across the lanelet2 map to a goal
     on /planning/mission_planning/goal and drives along it at a constant speed,
-    on the same topics and /robot_status values as the real robot.
+    on the same topics and /autoware/robot_status values as the real robot.
   </description>
 
   <maintainer email="devnull@example.com">zenoh_bridge maintainers</maintainer>
