@@ -57,7 +57,17 @@ Kept from autoware `948c4bef`. After readiness is first established, a stale LiD
 
 Measured at rest on 2026-11-04 (full battery): 2.4 Hz (the 30-reading average spans 12.5 s); voltage 25.25–26.11 V, stdev 0.26 V; `current` 1.1–2.4 A and real (not NaN); `percentage` stuck at 1.0 (the table tops out at 12.7 V per block). The table is steep: 0.1 V of pack voltage is about 6 %.
 
-Proposed `BatteryFilter` in the aggregator: take a reading only after the wheels have been still for about 15 s, only let it go down (except a sustained rise at rest: charging), take the first reading as is. More accurate: `V + I·R` once R is calibrated. Still to measure while driving, below about 80 %: voltage and current when accelerating and turning, the drop in percentage and the recovery time.
+Driven with RC on 2026-11-04 (full battery, 240 s: 30 s still, 110 s driving, 100 s still):
+
+| | Still | Driving |
+| --- | --- | --- |
+| `current` | 1.6 A | 4.5–9 A (10 s means), 25 A peak turning in place |
+| `voltage` | 25.6–25.7 V | 24.7–25.2 V |
+| `percentage` | 100 % | 56–80 %, back to 100 % within 10–20 s of stopping |
+
+Fitting V = E − R·I over all samples: R ≈ 0.10 Ω (r = −0.80), E ≈ 25.75 V. `V + I·R` cuts the voltage spread from 0.46 V to 0.28 V, the same as the measurement noise at rest, so the sag is almost all I·R.
+
+Implemented as `BatteryFilter` in the aggregator (`battery_resistance_ohm: 0.10`, `battery_series_blocks: 2` in `sources.yaml`): compensate (`V + R·I`), average over 30 s, look it up in the same SLA table, and only let it go down unless it stays at least 5 % higher for 60 s (charging). Still to check on the Husky below about 80 %, where the table isn't saturated: that the percentage stays flat while driving, and whether R needs tuning.
 
 ## Open questions
 
