@@ -28,4 +28,4 @@ git submodule update --init --recursive
 | `foxglove`     | `false` | Development: `foxglove_bridge` on `ws://<orin-ip>:8765` for remote monitoring |
 | `sensors`      | `false` | VLP-16 lidar + Fixposition GNSS/IMU (needs the Autoware workspace sourced) |
 
-For Mission Manager to drive the robot, Autoware has to run with `launch_api:=false` (`run_autoware.sh` does), otherwise every goal on `/planning/mission_planning/goal` is routed twice. `aggregator_node` reads `/localization/kinematic_state` (pose), `/husky/platform/odom` (speed), `/husky/platform/bms/state` and `/autoware/robot_status`; goals and cancels go to `/planning/mission_planning/goal` and `/husky/cancel`.
+For Mission Manager to drive the robot, Autoware has to run with `launch_api:=false` (`run_autoware.sh` does), otherwise every goal on `/planning/mission_planning/goal` is routed twice. `aggregator_node` reads `/localization/kinematic_state` (pose), `/husky/platform/odom` (speed), `/husky/platform/bms/state`, `/autoware/robot_status` and `state_machine`'s `/robot_mode`; goals and cancels go to `/planning/mission_planning/goal` and `/husky/cancel`.
