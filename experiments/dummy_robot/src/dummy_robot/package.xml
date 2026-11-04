@@ -1,11 +1,11 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>dummy_robot</name>
-  <version>0.3.0</version>
+  <version>0.4.0</version>
   <description>
     Lanelet-aware fake Husky: plans a route across the lanelet2 map to a goal
     on /planning/mission_planning/goal and drives along it at a constant speed,
-    on the same topics and /autoware/robot_status values as the real robot.
+    publishing the Autoware and Clearpath topics state_machine reads.
   </description>
 
   <maintainer email="devnull@example.com">zenoh_bridge maintainers</maintainer>
@@ -18,6 +18,8 @@
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>autoware_adapi_v1_msgs</depend>
+  <depend>autoware_planning_msgs</depend>
   <depend>lanelet2_core</depend>
   <depend>lanelet2_io</depend>
   <depend>lanelet2_projection</depend>

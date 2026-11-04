@@ -1,5 +1,5 @@
 # zenoh_bridge config for this Husky (mode: robot).
-# Pose comes from aggregator_node on /robot/state; unset keys use zenoh_bridge's defaults.
+# Pose comes from aggregator_node on /robot/device_state; unset keys use zenoh_bridge's defaults.
 /**:
   ros__parameters:
     # Device

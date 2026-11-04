@@ -14,6 +14,8 @@ find_package(nav_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(autoware_adapi_v1_msgs REQUIRED)
+find_package(autoware_planning_msgs REQUIRED)
 find_package(lanelet2_core REQUIRED)
 find_package(lanelet2_io REQUIRED)
 find_package(lanelet2_projection REQUIRED)
@@ -27,7 +29,7 @@ add_executable(dummy_robot_node
 )
 target_include_directories(dummy_robot_node PRIVATE include)
 ament_target_dependencies(dummy_robot_node
-  rclcpp nav_msgs std_msgs sensor_msgs geometry_msgs
+  rclcpp nav_msgs std_msgs sensor_msgs geometry_msgs autoware_adapi_v1_msgs autoware_planning_msgs
   lanelet2_core lanelet2_io lanelet2_projection lanelet2_routing lanelet2_traffic_rules
 )
 target_link_libraries(dummy_robot_node yaml-cpp)

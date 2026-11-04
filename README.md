@@ -24,8 +24,8 @@ git submodule update --init --recursive
 | `realsense`    | `true`  | RealSense camera (`config/realsense.yaml`) |
 | `zenoh_bridge` | `true`  | `zenoh_bridge_node` + `aggregator_node` (`config/zenoh_bridge.yaml`; set `zenoh.connect` to the mission manager's `zenohd`) |
 | `skeleton`     | `false` | `skeleton_detection` node (`config/skeleton_detection.yaml`), consumes the RealSense RGBD topic (needs `realsense:=true`) |
-| `state_machine` | `true` | Publishes `/robot_status` and `/robot_mode` from Autoware status, Husky odometry, and joystick commands |
+| `state_machine` | `true` | `/robot/status` (state, mode, reason, goal) and the `/robot/navigate` action, from Autoware and Clearpath topics; see [docs/robot_status_design.md](docs/robot_status_design.md) |
 | `foxglove`     | `false` | Development: `foxglove_bridge` on `ws://<orin-ip>:8765` for remote monitoring |
 | `sensors`      | `false` | VLP-16 lidar + Fixposition GNSS/IMU (needs the Autoware workspace sourced) |
 
-For Mission Manager to drive the robot, Autoware has to run with `launch_api:=false` (`run_autoware.sh` does), otherwise every goal on `/planning/mission_planning/goal` is routed twice. `aggregator_node` reads `/localization/kinematic_state` (pose), `/husky/platform/odom` (speed), `/husky/platform/bms/state`, `/autoware/robot_status` and `state_machine`'s `/robot_mode`; goals and cancels go to `/planning/mission_planning/goal` and `/husky/cancel`.
+For Mission Manager to drive the robot, Autoware has to run with `launch_api:=false` (`run_autoware.sh` does), otherwise every goal on `/planning/mission_planning/goal` is routed twice. `aggregator_node` reads `/localization/kinematic_state` (pose), `/husky/platform/odom` (speed), `/husky/platform/bms/state` and `state_machine`'s `/robot/status`; goals go through `state_machine`'s `/robot/navigate` action to `/planning/mission_planning/goal`, cancels to `/husky/cancel`.

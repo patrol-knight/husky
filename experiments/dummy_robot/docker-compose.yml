@@ -21,6 +21,7 @@ services:
       dockerfile: docker/state_machine.Dockerfile
       additional_contexts:
         state_machine: ../../modules/state_machine
+        patrolknight_msgs: ../../modules/patrolknight_msgs
     environment:
       - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
     restart: unless-stopped
@@ -31,6 +32,8 @@ services:
       context: ../../modules/zenoh_bridge
       dockerfile: docker/Dockerfile
       target: runtime
+      additional_contexts:
+        patrolknight_msgs: ../../modules/patrolknight_msgs
     command:
       - ros2
       - launch
