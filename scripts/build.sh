@@ -65,7 +65,7 @@ fi
 
 if $deps && [[ " ${groups[*]} " == *" zenoh_bridge "* ]]; then
   echo "==> zenoh_bridge install.sh"
-  SKIP_PATROLKNIGHT_MSGS=1 modules/zenoh_bridge/scripts/install.sh
+  modules/zenoh_bridge/scripts/install.sh
 fi
 
 if $deps && [[ " ${groups[*]} " == *" skeleton "* ]]; then
