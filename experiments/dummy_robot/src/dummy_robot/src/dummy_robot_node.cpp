@@ -10,6 +10,7 @@
 #include <autoware_adapi_v1_msgs/msg/operation_mode_state.hpp>
 #include <autoware_planning_msgs/msg/route_state.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -105,6 +106,9 @@ public:
     goal_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
       "/planning/mission_planning/goal", 10,
       [this](geometry_msgs::msg::PoseStamped::ConstSharedPtr msg) {on_goal(*msg);});
+    initial_pose_sub_ = create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+      "/initialpose", 1,
+      [this](geometry_msgs::msg::PoseWithCovarianceStamped::ConstSharedPtr msg) {on_initial_pose(*msg);});
     cancel_sub_ = create_subscription<std_msgs::msg::Header>(
       "/husky/cancel", 10, [this](std_msgs::msg::Header::ConstSharedPtr) {on_cancel();});
     for (const char * topic :
@@ -122,6 +126,12 @@ public:
     hook_subs_.push_back(create_subscription<std_msgs::msg::Bool>(
       "/dummy_robot/estop", 10,
       [this](std_msgs::msg::Bool::ConstSharedPtr msg) {estop_ = msg->data;}));
+    hook_subs_.push_back(create_subscription<std_msgs::msg::Bool>(
+      "/dummy_robot/obstacle", 10,
+      [this](std_msgs::msg::Bool::ConstSharedPtr msg) {obstacle_ = msg->data;}));
+    hook_subs_.push_back(create_subscription<std_msgs::msg::Bool>(
+      "/dummy_robot/control_fault", 10,
+      [this](std_msgs::msg::Bool::ConstSharedPtr msg) {control_fault_ = msg->data;}));
 
     start_time_ = SteadyClock::now();
     last_tick_ = start_time_;
@@ -230,6 +240,20 @@ private:
     return last_manual_ && seconds_between(*last_manual_, now) < kManualHoldSec;
   }
 
+  // Like Autoware: localization stops while it aligns, then comes back at the pose.
+  void on_initial_pose(const geometry_msgs::msg::PoseWithCovarianceStamped & msg)
+  {
+    const auto & pose = msg.pose.pose;
+    x_ = pose.position.x;
+    y_ = pose.position.y;
+    yaw_ = 2.0 * std::atan2(pose.orientation.z, pose.orientation.w);
+    pending_goal_.reset();
+    clear_route();
+    localization_lost_ = false;
+    aligned_at_ = SteadyClock::now() + to_duration(init_delay_sec_);
+    RCLCPP_INFO(get_logger(), "Initial pose (%.2f, %.2f); localizing for %.1f s", x_, y_, init_delay_sec_);
+  }
+
   void on_localization_lost(bool lost)
   {
     if (lost == localization_lost_) {
@@ -262,7 +286,7 @@ private:
     linear_mps_ = 0.0;
     if (!estop_ && last_manual_ && seconds_between(*last_manual_, now) < kManualCommandTimeoutSec) {
       drive_manual(dt);
-    } else if (autonomous(now)) {
+    } else if (autonomous(now) && !obstacle_) {
       advance(dt);
     }
     const double yaw_rate = dt > 0.0 ? wrap_angle(yaw_ - yaw_before) / dt : 0.0;
@@ -284,7 +308,8 @@ private:
 
   bool autonomous(SteadyClock::time_point now) const
   {
-    return !estop_ && !manual_active(now) && (route_ == RouteState::SET || route_ == RouteState::REROUTING);
+    return !estop_ && !control_fault_ && !manual_active(now) &&
+           (route_ == RouteState::SET || route_ == RouteState::REROUTING);
   }
 
   void drive_manual(double dt)
@@ -329,11 +354,14 @@ private:
 
   bool localized() const
   {
-    return !localization_lost_ && seconds_between(start_time_, SteadyClock::now()) >= init_delay_sec_;
+    const auto now = SteadyClock::now();
+    return !localization_lost_ && seconds_between(start_time_, now) >= init_delay_sec_ && now >= aligned_at_;
   }
 
+  // Like the vehicle interface: a tracking fault lasts until the route changes.
   void clear_route()
   {
+    control_fault_ = false;
     path_.clear();
     path_index_ = 0;
     set_route(RouteState::UNSET);
@@ -385,6 +413,7 @@ private:
   void publish_sensors()
   {
     std_msgs::msg::Bool obstacle;
+    obstacle.data = obstacle_;
     lidar_pub_->publish(obstacle);
     sensor_msgs::msg::Imu imu;
     imu.header.stamp = now();
@@ -436,6 +465,7 @@ private:
   double y_;
   double yaw_;
   double init_delay_sec_;
+  SteadyClock::time_point aligned_at_{};
   double battery_cycle_sec_;
   double speed_mps_;
   double goal_map_tolerance_m_;
@@ -444,6 +474,8 @@ private:
   bool localization_lost_ = false;
   bool published_localized_ = false;
   bool estop_ = false;
+  bool obstacle_ = false;
+  bool control_fault_ = false;
   double linear_mps_ = 0.0;
   std::optional<SteadyClock::time_point> last_manual_;
   geometry_msgs::msg::Twist manual_cmd_;
@@ -472,6 +504,7 @@ private:
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr request_pub_;
   rclcpp::Publisher<OperationModeState>::SharedPtr operation_pub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr initial_pose_sub_;
   rclcpp::Subscription<std_msgs::msg::Header>::SharedPtr cancel_sub_;
   std::vector<rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr> manual_subs_;
   std::vector<rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr> hook_subs_;

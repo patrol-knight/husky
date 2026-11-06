@@ -43,7 +43,7 @@ The lanelet2 map is the robot's own copy in `maps/`, the same way a real robot c
 
 ## What it fakes
 
-- **Localization**: `/localization/initialization_state` goes `INITIALIZED` after `init_delay_sec` (2 s); only then are `/localization/kinematic_state` and the LiDAR / IMU heartbeats (`/sensing/lidar/obstacle_stop`, `/sensing/imu/imu_data`) published.
+- **Localization**: `/localization/initialization_state` goes `INITIALIZED` after `init_delay_sec` (2 s); only then are `/localization/kinematic_state` and the LiDAR / IMU heartbeats (`/sensing/lidar/obstacle_stop`, `/sensing/imu/imu_data`) published. A pose on `/initialpose` moves the robot there and repeats that delay, like Autoware stopping localization while it aligns.
 - **Planning adaptor**: a goal on `/planning/mission_planning/goal` publishes `pending` and route `ROUTING`; `route_request_sec` (0.5 s) later the route is `SET` and `accepted`, or `rejected` when the goal is off the lanelet map or `/dummy_robot/route_reject` is true. A goal while a request is in flight is dropped. A rejected goal is retried once per second; when a retry plans, it reports `accepted` and leaves the route `UNSET`, like the adaptor. A cancel publishes `cancelled` and clears the route.
 - **Vehicle interface**: `/system/operation_mode/state` is `AUTONOMOUS` with control enabled while the route is set and nobody overrides it, `STOP` under e-stop, else `LOCAL`. A `Twist` on any teleop topic (`joy_teleop`, `rc_teleop`, `twist_marker_server`) clears the route and drives the robot by that twist while commands keep coming (0.25 s); goals within 1 s of one are ignored.
 - **Driving**: along the route at `speed_mps`; at the end the route is `ARRIVED` and the robot stops.
@@ -58,6 +58,8 @@ ros2 topic pub -r 10 /husky/joy_teleop/cmd_vel geometry_msgs/msg/Twist "{linear:
 ros2 topic pub --once /dummy_robot/route_reject std_msgs/msg/Bool "{data: true}"             # planner rejects routes
 ros2 topic pub --once /dummy_robot/estop std_msgs/msg/Bool "{data: true}"                    # e-stop pressed
 ros2 topic pub --once /dummy_robot/localization_lost std_msgs/msg/Bool "{data: true}"        # localization lost
+ros2 topic pub --once /dummy_robot/obstacle std_msgs/msg/Bool "{data: true}"                 # obstacle ahead: blocked until false
+ros2 topic pub --once /dummy_robot/control_fault std_msgs/msg/Bool "{data: true}"            # Autoware loses control: not_moving after 10 s
 ```
 
 A real joystick works too: run the joystick teleop on the same `ROS_DOMAIN_ID` (see [ROS domain](#ros-domain)).
@@ -76,6 +78,7 @@ A real joystick works too: run the joystick teleop on the same `ROS_DOMAIN_ID` (
 | `/husky/platform/bms/state` | `sensor_msgs/BatteryState` (`percentage` 0–1) | pub | Clearpath driver |
 | `/husky/platform/emergency_stop` | `std_msgs/Bool` | pub | Clearpath MCU |
 | `/planning/mission_planning/goal` | `geometry_msgs/PoseStamped` | sub | planning adaptor |
+| `/initialpose` | `geometry_msgs/PoseWithCovarianceStamped` | sub | Autoware |
 | `/husky/cancel` | `std_msgs/Header` | sub | adaptor, vehicle interface |
 | `/husky/joy_teleop/cmd_vel`, `/husky/rc_teleop/cmd_vel`, `/husky/twist_marker_server/cmd_vel` | `geometry_msgs/Twist` | sub | vehicle interface (takeover) |
 | `/dummy_robot/route_reject`, `/dummy_robot/estop`, `/dummy_robot/localization_lost` | `std_msgs/Bool` | sub | (test hooks) |
