@@ -23,8 +23,9 @@ Principles: one vocabulary; one owner per fact; states are states and events are
 ## Mission manager
 
 - Reads `status.state` / `mode` / `reason` / `goal_id`. Can start a mission when `state` is `ready`, `navigating` or `arrived` and `mode` is `none` or `auto`.
-- A waypoint or investigation goal ends on its command result (matched by `request_id`): `succeeded` reaches it; `goal_dropped` and `state_machine_unavailable` send it again, as does no `running` within `navigation_timeout_sec` (10 s); `preempted` is ignored; any other `failed` aborts autonomy without a cancel.
-- `manual` and `failure` abort without a cancel (the route is already cleared, or kept for the operator); `notready` and `estop` abort with one (an e-stop leaves the route set).
+- A waypoint or investigation goal ends on its command result (matched by `request_id`): `succeeded` reaches it; `goal_dropped` and `state_machine_unavailable` send it again, as does no `running` within `navigation_timeout_sec` (10 s); `preempted` is ignored; any other `failed` aborts autonomy without a cancel, except the route failures below.
+- `route_rejected` / `route_aborted` (or `state: failure`) pause a running mission without a cancel: Autoware keeps retrying while the operator drives the robot back onto the lanes with RC, then Resume (once `ready`) re-sends the same waypoint, or Cancel clears the failure. An investigation is aborted instead.
+- `manual` aborts without a cancel (the route is already cleared); `notready` and `estop` abort with one (an e-stop leaves the route set).
 - The Start hint uses `reason`; the mode pill shows for `auto`, `manual` and `estop`.
 
 ## Merge order
