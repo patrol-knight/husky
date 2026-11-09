@@ -8,6 +8,7 @@ ros2 launch launch/main.launch.py \
     realsense:=true \
     zenoh_bridge:=true \
     skeleton:=false \
+    state_machine:=true \
     foxglove:=false \
     sensors:=false \
     "$@"

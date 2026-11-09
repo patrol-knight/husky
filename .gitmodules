@@ -10,3 +10,11 @@
 	path = modules/skeleton_detection
 	url = git@github.com:patrol-knight/skeleton_detection.git
 	branch = main
+[submodule "modules/state_machine"]
+	path = modules/state_machine
+	url = git@github.com:patrol-knight/state_machine.git
+	branch = main
+[submodule "modules/patrolknight_msgs"]
+	path = modules/patrolknight_msgs
+	url = git@github.com:patrol-knight/patrolknight_msgs.git
+	branch = main

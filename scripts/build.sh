@@ -9,10 +9,12 @@
 #                  nodes), clearpath_generator_robot, clearpath_diagnostics.
 #                  The rest of the Clearpath stack comes from apt
 #                  (ros-humble-clearpath-common).
-#   zenoh_bridge   zenoh_bridge, aggregator, zenoh_bridge_msgs, plus
-#                  patrolknight_msgs, which --deps clones into its src/
-#                  (modules/zenoh_bridge/scripts/install.sh).
-#   skeleton       skeleton_detection (needs patrolknight_msgs from zenoh_bridge).
+#   zenoh_bridge   zenoh_bridge, aggregator, zenoh_bridge_msgs.
+#   skeleton       skeleton_detection.
+#   state_machine  Husky robot status, control mode and navigation action.
+#
+# patrolknight_msgs (modules/patrolknight_msgs, the shared messages) is built
+# with any of the three, so it is pinned with the other submodules.
 #
 # Building one group leaves the other's already-installed packages in place.
 #
@@ -22,6 +24,7 @@
 #   ./scripts/build.sh --deps clearpath    # rosdep-install its dependencies first
 #   ./scripts/build.sh --deps zenoh_bridge # run zenoh_bridge's install.sh first
 #   ./scripts/build.sh --deps skeleton     # download skeleton_detection's models first
+#   ./scripts/build.sh state_machine       # rebuild the state machine only
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -29,15 +32,14 @@ cd "$REPO_ROOT"
 
 declare -A GROUP_PATHS=(
   [clearpath]="modules/clearpath_robot/clearpath_hardware_interfaces modules/clearpath_robot/clearpath_generator_robot modules/clearpath_robot/clearpath_diagnostics"
-  # Globbed when paths are collected, so it picks up patrolknight_msgs
-  # once --deps has cloned it.
-  [zenoh_bridge]="modules/zenoh_bridge/src/*"
+  [zenoh_bridge]="modules/zenoh_bridge/src/aggregator modules/zenoh_bridge/src/zenoh_bridge modules/zenoh_bridge/src/zenoh_bridge_msgs"
   [skeleton]="modules/skeleton_detection"
+  [state_machine]="modules/state_machine"
 )
-ALL_GROUPS=(clearpath zenoh_bridge skeleton)
+ALL_GROUPS=(clearpath zenoh_bridge skeleton state_machine)
 
 usage() {
-  echo "Usage: $(basename "$0") [--deps] [clearpath] [zenoh_bridge] [skeleton]" >&2
+  echo "Usage: $(basename "$0") [--deps] [clearpath] [zenoh_bridge] [skeleton] [state_machine]" >&2
   exit 1
 }
 
@@ -72,17 +74,16 @@ if $deps && [[ " ${groups[*]} " == *" skeleton "* ]]; then
 fi
 
 paths=()
+if [[ " ${groups[*]} " =~ " "(zenoh_bridge|skeleton|state_machine)" " ]]; then
+  [[ -f modules/patrolknight_msgs/package.xml ]] || { echo "Missing modules/patrolknight_msgs -- run: git submodule update --init --recursive" >&2; exit 1; }
+  paths+=(modules/patrolknight_msgs)
+fi
 for group in "${groups[@]}"; do
   for path in ${GROUP_PATHS[$group]}; do
     [[ -d "$path" ]] || { echo "Missing $path -- run: git submodule update --init --recursive" >&2; exit 1; }
     paths+=("$path")
   done
 done
-
-if [[ " ${groups[*]} " == *" zenoh_bridge "* && ! -d modules/zenoh_bridge/src/patrolknight_msgs ]]; then
-  echo "Missing modules/zenoh_bridge/src/patrolknight_msgs -- run: ./scripts/build.sh --deps zenoh_bridge" >&2
-  exit 1
-fi
 
 if $deps; then
   echo "==> rosdep install for: ${groups[*]}"

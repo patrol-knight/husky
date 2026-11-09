@@ -1,22 +1,18 @@
-# realsense2_camera_node parameters for the Husky's RealSense camera. Edit
-# directly (resolution/fps/serial_no) -- launch/realsense.launch.py loads
-# this file by default. Leaving serial_no empty uses whichever RealSense is
-# plugged in -- only set it if multiple RealSense cameras are attached.
-#
-# Only color + depth-aligned-to-color are streamed; every other RealSense
-# stream/feature is off so we're not spending USB bandwidth or Orin CPU on
-# data nobody subscribes to. Turn things on here as consumers are added.
+# Color only, matching the WebRTC stream size.
 /**:
   ros__parameters:
     serial_no: ""
-    rgb_camera.color_profile: "1280x720x30"
-    depth_module.depth_profile: "848x480x30"
+    rgb_camera.color_profile: "848x480x30"
 
     enable_color: true
-    enable_depth: true
-    align_depth.enable: true
-    enable_sync: true
-    enable_rgbd: true
+    enable_depth: false
+
+    # Skeleton detection: remove enable_depth above, then uncomment these.
+    # enable_depth: true
+    # depth_module.depth_profile: "848x480x30"
+    # align_depth.enable: true
+    # enable_sync: true
+    # enable_rgbd: true
 
     pointcloud.enable: false
     enable_infra1: false

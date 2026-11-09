@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y \
     ros-humble-lanelet2-projection \
     ros-humble-lanelet2-routing \
     ros-humble-lanelet2-traffic-rules \
+    ros-humble-autoware-adapi-v1-msgs \
+    ros-humble-autoware-planning-msgs \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
