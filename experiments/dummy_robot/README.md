@@ -56,6 +56,7 @@ Test hooks, run inside any of the containers (`docker compose exec state_machine
 ```bash
 ros2 topic pub -r 10 /husky/joy_teleop/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5}}"  # joystick, Ctrl-C to release
 ros2 topic pub --once /dummy_robot/route_reject std_msgs/msg/Bool "{data: true}"             # planner rejects routes
+ros2 topic pub --once /dummy_robot/reroute_refuse std_msgs/msg/Bool "{data: true}"           # like Autoware: a goal mid-route gets pending, the old route stays
 ros2 topic pub --once /dummy_robot/estop std_msgs/msg/Bool "{data: true}"                    # e-stop pressed
 ros2 topic pub --once /dummy_robot/localization_lost std_msgs/msg/Bool "{data: true}"        # localization lost
 ros2 topic pub --once /dummy_robot/obstacle std_msgs/msg/Bool "{data: true}"                 # obstacle ahead: blocked until false

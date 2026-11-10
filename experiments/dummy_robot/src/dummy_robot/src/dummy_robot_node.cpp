@@ -121,6 +121,9 @@ public:
       "/dummy_robot/route_reject", 10,
       [this](std_msgs::msg::Bool::ConstSharedPtr msg) {route_reject_ = msg->data;}));
     hook_subs_.push_back(create_subscription<std_msgs::msg::Bool>(
+      "/dummy_robot/reroute_refuse", 10,
+      [this](std_msgs::msg::Bool::ConstSharedPtr msg) {reroute_refuse_ = msg->data;}));
+    hook_subs_.push_back(create_subscription<std_msgs::msg::Bool>(
       "/dummy_robot/localization_lost", 10,
       [this](std_msgs::msg::Bool::ConstSharedPtr msg) {on_localization_lost(msg->data);}));
     hook_subs_.push_back(create_subscription<std_msgs::msg::Bool>(
@@ -157,6 +160,12 @@ private:
     }
     if (pending_goal_) {
       RCLCPP_WARN(get_logger(), "Route request is still in progress; dropping the goal");
+      return;
+    }
+    // Like Autoware refusing a reroute while driving: the adaptor said pending, then nothing.
+    if (reroute_refuse_ && (route_ == RouteState::SET || route_ == RouteState::REROUTING)) {
+      publish_request("pending");
+      RCLCPP_WARN(get_logger(), "Reroute refused; keeping the current route");
       return;
     }
     failed_goal_.reset();
@@ -471,6 +480,7 @@ private:
   double goal_map_tolerance_m_;
   double route_request_sec_;
   bool route_reject_ = false;
+  bool reroute_refuse_ = false;
   bool localization_lost_ = false;
   bool published_localized_ = false;
   bool estop_ = false;
