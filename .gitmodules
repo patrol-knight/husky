@@ -18,3 +18,7 @@
 	path = modules/patrolknight_msgs
 	url = git@github.com:patrol-knight/patrolknight_msgs.git
 	branch = main
+[submodule "modules/camera_tower"]
+	path = modules/camera_tower
+	url = git@github.com:patrol-knight/camera_tower.git
+	branch = main
