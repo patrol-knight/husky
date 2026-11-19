@@ -12,9 +12,10 @@
 #   zenoh_bridge   zenoh_bridge, aggregator, zenoh_bridge_msgs.
 #   skeleton       skeleton_detection.
 #   state_machine  Husky robot status, control mode and navigation action.
+#   camera_tower   Three-camera image combiner.
 #
 # patrolknight_msgs (modules/patrolknight_msgs, the shared messages) is built
-# with any of the three, so it is pinned with the other submodules.
+# with the groups that depend on it, so it is pinned with the other submodules.
 #
 # Building one group leaves the other's already-installed packages in place.
 #
@@ -25,6 +26,7 @@
 #   ./scripts/build.sh --deps zenoh_bridge # run zenoh_bridge's install.sh first
 #   ./scripts/build.sh --deps skeleton     # download skeleton_detection's models first
 #   ./scripts/build.sh state_machine       # rebuild the state machine only
+#   ./scripts/build.sh camera_tower        # rebuild the camera combiner only
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -35,11 +37,12 @@ declare -A GROUP_PATHS=(
   [zenoh_bridge]="modules/zenoh_bridge/src/aggregator modules/zenoh_bridge/src/zenoh_bridge modules/zenoh_bridge/src/zenoh_bridge_msgs"
   [skeleton]="modules/skeleton_detection"
   [state_machine]="modules/state_machine"
+  [camera_tower]="modules/camera_tower"
 )
-ALL_GROUPS=(clearpath zenoh_bridge skeleton state_machine)
+ALL_GROUPS=(clearpath zenoh_bridge skeleton state_machine camera_tower)
 
 usage() {
-  echo "Usage: $(basename "$0") [--deps] [clearpath] [zenoh_bridge] [skeleton] [state_machine]" >&2
+  echo "Usage: $(basename "$0") [--deps] [clearpath] [zenoh_bridge] [skeleton] [state_machine] [camera_tower]" >&2
   exit 1
 }
 

@@ -21,7 +21,8 @@ sync_clock
 
 ros2 launch launch/main.launch.py \
     husky:=true \
-    realsense:=true \
+    realsense:=false \
+    camera_tower:=true \
     zenoh_bridge:=true \
     skeleton:=false \
     state_machine:=true \

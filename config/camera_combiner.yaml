@@ -1,0 +1,14 @@
+three_camera_combiner:
+  ros__parameters:
+    camera_devices:
+      - "/dev/video10"
+      - "/dev/video14"
+      - "/dev/video6"
+    capture_width: 320
+    capture_height: 240
+    capture_fps: 15
+    publish_fps: 15
+    output_topic: "/device/camera/front/image_raw"
+    output_encoding: "bgr8"
+    frame_id: "combined_camera"
+    show_preview: false

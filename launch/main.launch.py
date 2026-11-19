@@ -25,6 +25,11 @@ def generate_launch_description():
             description="RealSense camera",
         ),
         DeclareLaunchArgument(
+            "camera_tower",
+            default_value="false",
+            description="Three-camera image combiner",
+        ),
+        DeclareLaunchArgument(
             "zenoh_bridge",
             default_value="true",
             description="zenoh_bridge_node + aggregator_node",
@@ -58,6 +63,14 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(os.path.join(REPO_ROOT, "launch/realsense.launch.py")),
             launch_arguments={"config_file": os.path.join(REPO_ROOT, "config/realsense.yaml")}.items(),
             condition=IfCondition(LaunchConfiguration("realsense")),
+        ),
+        Node(
+            package="three_camera_combiner",
+            executable="camera_combiner_node",
+            name="three_camera_combiner",
+            parameters=[os.path.join(REPO_ROOT, "config/camera_combiner.yaml")],
+            output="screen",
+            condition=IfCondition(LaunchConfiguration("camera_tower")),
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(REPO_ROOT, "modules/zenoh_bridge/launch/bringup.launch.py")),
